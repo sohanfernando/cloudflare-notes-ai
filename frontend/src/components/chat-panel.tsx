@@ -1,7 +1,7 @@
 import { useChat } from '@ai-sdk/react'
 import { MAX_QUESTION_CHARS, type ChatDataParts, type Citation } from '@shared/types'
 import { DefaultChatTransport, type UIMessage } from 'ai'
-import { BookOpenIcon, MessageSquareIcon, RotateCcwIcon, SquarePenIcon } from 'lucide-react'
+import { BookOpenIcon, ChevronDownIcon, MessageSquareIcon, RotateCcwIcon, SquarePenIcon } from 'lucide-react'
 import { useState } from 'react'
 import {
   Conversation,
@@ -149,7 +149,12 @@ function ChatMessageView({ message }: { message: ChatMessage }) {
 function CitationList({ citations }: { citations: Citation[] }) {
   return (
     <Sources defaultOpen>
-      <SourcesTrigger count={citations.length} />
+      <SourcesTrigger count={citations.length}>
+        <p className="font-medium">
+          {citations.length === 1 ? 'Used 1 source' : `Used ${citations.length} sources`}
+        </p>
+        <ChevronDownIcon className="size-4" />
+      </SourcesTrigger>
       <SourcesContent className="w-full">
         {citations.map((citation) => (
           <div className="flex gap-2 rounded-lg border p-2 text-foreground" key={citation.chunkId}>

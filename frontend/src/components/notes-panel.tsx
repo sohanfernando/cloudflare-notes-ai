@@ -1,12 +1,15 @@
 import { MAX_NOTE_BYTES, MAX_TITLE_CHARS, type NoteSummary } from '@shared/types'
 import { FileTextIcon, PlusIcon, Trash2Icon } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { byteLength, formatBytes, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
+
+/** How long the "note added" hint stays visible. */
+const INDEXING_HINT_MS = 15_000
 
 interface NotesPanelProps {
   notes: NoteSummary[]
@@ -50,18 +53,28 @@ function AddNoteForm({ onAdd }: Pick<NotesPanelProps, 'onAdd'>) {
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [justAdded, setJustAdded] = useState(false)
 
   const size = byteLength(content)
   const tooLarge = size > MAX_NOTE_BYTES
+
+  // The vector index takes a few seconds to pick up a new note, so say so for a while.
+  useEffect(() => {
+    if (!justAdded) return
+    const timer = setTimeout(() => setJustAdded(false), INDEXING_HINT_MS)
+    return () => clearTimeout(timer)
+  }, [justAdded])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setSaving(true)
     setError(null)
+    setJustAdded(false)
     try {
       await onAdd({ title, content })
       setTitle('')
       setContent('')
+      setJustAdded(true)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save the note.')
     } finally {
@@ -95,6 +108,11 @@ function AddNoteForm({ onAdd }: Pick<NotesPanelProps, 'onAdd'>) {
         </Button>
       </div>
       {error && <p className="text-destructive text-sm">{error}</p>}
+      {justAdded && (
+        <p className="text-muted-foreground text-xs" role="status">
+          Note added. It can take a few seconds before answers start using it.
+        </p>
+      )}
     </form>
   )
 }

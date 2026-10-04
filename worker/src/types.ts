@@ -6,6 +6,8 @@ export interface Env {
   DB: D1Database;
   /** Only bound in production; local development uses the D1-backed store. */
   VECTORIZE?: Vectorize;
+  /** Per-user limiter for the routes that call the AI models. */
+  AI_RATE_LIMITER: RateLimit;
 
   LLM_BASE_URL: string;
   LLM_API_KEY: string;
