@@ -14,7 +14,8 @@ enabled = true
 
 # Production values. Local development overrides these from .dev.vars.
 [vars]
-LLM_MODEL = "@cf/meta/llama-3-8b-instruct"
+# Llama 3 8B, which the assignment names, has been retired from Workers AI; 3.1 8B is its successor.
+LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
 EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
 AUTH_ENABLED = "true"
 VECTOR_STORE = "vectorize"

@@ -2,7 +2,11 @@ import type { NoteSummary } from '@shared/types'
 
 const FALLBACK_ERROR = 'Something went wrong. Please try again.'
 
-/** Extracts the `error` field the Worker sends with every failed response. */
+/**
+ * Turns an error body from the Worker into a message for the user. Failed
+ * requests carry JSON with an `error` field; an error in the middle of a chat
+ * stream arrives as the plain sentence the Worker wrote.
+ */
 export function parseErrorMessage(body: string): string {
   try {
     const parsed: unknown = JSON.parse(body)
@@ -10,7 +14,9 @@ export function parseErrorMessage(body: string): string {
       return parsed.error
     }
   } catch {
-    // Not JSON: fall through to the generic message.
+    // Anything that looks like markup is an error page from a proxy, not a message of ours.
+    const text = body.trim()
+    if (text && !text.startsWith('<')) return text
   }
   return FALLBACK_ERROR
 }
