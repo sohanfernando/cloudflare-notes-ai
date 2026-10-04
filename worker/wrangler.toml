@@ -17,6 +17,8 @@ enabled = true
 # Llama 3 8B, which the assignment names, has been retired from Workers AI; 3.1 8B is its successor.
 LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
 EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
+# With bge-base, unrelated text scores about 0.50-0.54 and real matches 0.62 and up.
+CITATION_MIN_SCORE = "0.58"
 AUTH_ENABLED = "true"
 VECTOR_STORE = "vectorize"
 

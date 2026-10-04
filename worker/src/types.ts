@@ -13,6 +13,11 @@ export interface Env {
   LLM_API_KEY: string;
   LLM_MODEL: string;
   EMBEDDING_MODEL: string;
+  /**
+   * Lowest similarity score (0 to 1) a chunk needs to be shown as a source.
+   * Set per environment because each embedding model scores on its own scale.
+   */
+  CITATION_MIN_SCORE?: string;
 
   /** Auth is enforced unless this is exactly "false". */
   AUTH_ENABLED: string;

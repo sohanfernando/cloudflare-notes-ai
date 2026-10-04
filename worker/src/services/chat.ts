@@ -61,10 +61,12 @@ async function retrieve(env: Env, userId: string, question: string): Promise<Ret
 }
 
 /** Picks the chunks worth showing as sources for an answer. */
-function selectCitations(chunks: RetrievedChunk[], answer: string): Citation[] {
+function selectCitations(env: Env, chunks: RetrievedChunk[], answer: string): Citation[] {
   // An "I don't know" answer was not derived from any note, so it cites none.
   if (UNKNOWN_ANSWER.test(answer)) return [];
-  const minScore = (chunks[0]?.score ?? 0) * CITATION_SCORE_RATIO;
+  // The floor drops everything when even the best match is weak, e.g. for a greeting.
+  const floor = Number(env.CITATION_MIN_SCORE) || 0;
+  const minScore = Math.max(floor, (chunks[0]?.score ?? 0) * CITATION_SCORE_RATIO);
   return chunks
     .filter((chunk) => chunk.score >= minScore)
     .map(({ content: _content, ...citation }) => citation);
@@ -105,7 +107,7 @@ export async function answerQuestion(env: Env, userId: string, request: ChatRequ
         messages: [...request.history, { role: "user", content: request.question }],
         // Sources are chosen once the answer is complete, since they depend on what it says.
         onEnd: ({ text }) => {
-          const citations = selectCitations(chunks, text);
+          const citations = selectCitations(env, chunks, text);
           if (citations.length > 0) writer.write({ type: "data-citations", data: citations });
         },
       });

@@ -6,6 +6,8 @@ LLM_BASE_URL=http://localhost:11434/v1
 LLM_API_KEY=ollama
 LLM_MODEL=llama3
 EMBEDDING_MODEL=nomic-embed-text
+# Lowest similarity score shown as a source; nomic-embed-text scores lower than the production model
+CITATION_MIN_SCORE=0.48
 
 # Cloudflare Access is bypassed locally; every request runs as dev@localhost
 AUTH_ENABLED=false
