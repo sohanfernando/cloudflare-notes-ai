@@ -1,0 +1,17 @@
+# Local development settings. Copy to worker/.dev.vars (which is gitignored).
+# `wrangler dev` loads .dev.vars and it overrides [vars] in wrangler.toml.
+
+# Ollama's OpenAI-compatible API
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
+LLM_MODEL=llama3
+EMBEDDING_MODEL=nomic-embed-text
+
+# Cloudflare Access is bypassed locally; every request runs as dev@localhost
+AUTH_ENABLED=false
+
+# Vectors are kept in the local D1 database instead of Vectorize
+VECTOR_STORE=local
+
+# Origin of the Vite dev server
+ALLOWED_ORIGIN=http://localhost:5173

@@ -1,0 +1,26 @@
+{
+  "name": "notes-ai-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker API for Notes AI: notes, RAG retrieval and streamed chat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute notes-ai-db --local --file=db/schema.sql && wrangler d1 execute notes-ai-db --local --file=db/schema.local.sql",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.62",
+    "ai": "^7.0.127",
+    "hono": "^4.13.13",
+    "jose": "^6.2.12",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261004.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.147.0"
+  }
+}

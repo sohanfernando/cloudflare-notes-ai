@@ -1,0 +1,28 @@
+name = "notes-ai"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# The built React app is served from the same origin as the API.
+[assets]
+directory = "../frontend/dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[observability]
+enabled = true
+
+# Production values. Local development overrides these from .dev.vars.
+[vars]
+LLM_MODEL = "@cf/meta/llama-3-8b-instruct"
+EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
+AUTH_ENABLED = "true"
+VECTOR_STORE = "vectorize"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "notes-ai-db"
+database_id = "117ca853-3d27-4082-98d8-b9f0b48607f1"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "notes-ai-index"
