@@ -14,11 +14,11 @@ enabled = true
 
 # Production values. Local development overrides these from .dev.vars.
 [vars]
-# Llama 3 8B, which the assignment names, has been retired from Workers AI; 3.1 8B is its successor.
+# Llama 3.1 8B: Workers AI has retired Llama 3 8B, the model the local `llama3` setup mirrors.
 LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
 EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
-# With bge-base, unrelated text scores about 0.50-0.54 and real matches 0.62 and up.
-CITATION_MIN_SCORE = "0.58"
+# With bge-base, unrelated text has scored up to 0.54 and real matches 0.59 and up.
+CITATION_MIN_SCORE = "0.56"
 AUTH_ENABLED = "true"
 VECTOR_STORE = "vectorize"
 
