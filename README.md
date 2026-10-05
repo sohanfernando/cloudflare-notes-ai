@@ -11,6 +11,7 @@ It runs entirely on Cloudflare's free tier (Workers, D1, Vectorize, Workers AI, 
 - Ask questions and get streamed answers grounded in your notes, with the source note and chunk shown under each answer.
 - Ask across all your notes, or pick one note in the chat box to ask about only that one.
 - Follow-up questions keep the context of the conversation.
+- Verified quotes: each answer shows passages from your notes that back it up, and each passage is marked as verified only after the server finds it word for word in the note.
 - Gaps: questions your notes couldn't answer are listed, so you can see what is worth adding. A gap closes when you ask it again and get an answer, and is flagged when a note you add looks likely to answer it.
 - Every user sees only their own notes. Login is handled by Cloudflare Access.
 - Works on phones, with light and dark themes.
@@ -52,12 +53,24 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 1. The question is embedded with the same model.
 2. The vector index returns the 5 most similar chunks, filtered to the current user and, if a note is selected, to that note.
 3. The chunk text is read from D1, again filtered by user.
-4. The model is told to answer only from those chunks, and to say "I don't know" otherwise.
-5. The answer streams to the browser. When it finishes, the chunks that scored well enough are sent as its sources.
+4. The model is told to answer only from those chunks, to say "I don't know" otherwise, and to end its reply with a `QUOTES:` section of passages copied from them.
+5. The answer streams to the browser. The `QUOTES:` section is cut out of the stream as it passes, so it is never displayed as the model wrote it.
+6. When the reply is complete, the chunks that scored well enough are sent as its sources, and the quotes are checked and sent (see below).
+
+### Verified quotes
+
+The model's quotes are treated as claims to check, never as facts.
+
+1. Each quote is looked up in the text of the chunks the model was given. Case, spacing and quotation-mark style are ignored; the wording must match. A quote may skip text with "..." if every part appears, in order, within one chunk.
+2. A quote that is found is shown as verified, with the note it came from. One that is not found is shown as "not found word for word", so a loose paraphrase is visible instead of hidden.
+3. If none of the model's quotes is verified, or it gave none, the server picks the sentences from the cited chunks that share the most key terms with the answer. These are copied from the note text, so they are exact by construction.
+4. If the model skips the answer and writes only quotes, the verified ones are shown as the answer.
+
+Because of steps 3 and 4, the feature does not depend on the model following the format.
 
 ### Gaps
 
-1. When the model replies "I don't know", the question is saved with its embedding and the score of the best chunk it was offered. Repeats of a question raise its count; messages under three words are ignored.
+1. When the model replies "I don't know", the question is saved with its embedding and the score of the best chunk it was offered. Repeats of a question raise its count; messages under three words and small talk such as greetings are ignored.
 2. When a later answer to the same question is not "I don't know", the gap is deleted.
 3. When note text is added, its chunks are compared with the open gaps. A gap is flagged with that note if a chunk matches its question clearly better than the best match it had before. This is a hint only; step 2 is what closes a gap.
 
@@ -67,7 +80,7 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 |---|---|
 | Backend | Cloudflare Worker, TypeScript, [Hono](https://hono.dev) |
 | AI calls | [AI SDK](https://ai-sdk.dev) with an OpenAI-compatible provider |
-| Models (production) | Workers AI: `@cf/meta/llama-3.1-8b-instruct-fp8`, `@cf/baai/bge-base-en-v1.5` |
+| Models (production) | Workers AI: `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, `@cf/baai/bge-base-en-v1.5` |
 | Models (local) | Ollama: `llama3`, `nomic-embed-text` |
 | Database | Cloudflare D1 (SQLite) |
 | Vector index | Cloudflare Vectorize (768 dimensions, cosine) |
@@ -158,7 +171,7 @@ Locally, all values come from `worker/.dev.vars`. In production they come from t
 
 | Variable | Purpose | Production value | Set in |
 |---|---|---|---|
-| `LLM_MODEL` | Chat model | `@cf/meta/llama-3.1-8b-instruct-fp8` | `wrangler.toml` |
+| `LLM_MODEL` | Chat model | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `wrangler.toml` |
 | `EMBEDDING_MODEL` | Embedding model; must produce 768 dimensions | `@cf/baai/bge-base-en-v1.5` | `wrangler.toml` |
 | `CITATION_MIN_SCORE` | Lowest similarity score shown as a source | `0.56` | `wrangler.toml` |
 | `AUTH_ENABLED` | Login is enforced unless this is exactly `false` | `true` | `wrangler.toml` |
@@ -237,6 +250,9 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **Gaps are recorded by wording.** A follow-up such as "and how often?" is saved as its own gap even though it only made sense in its conversation, and two differently worded versions of one question are two gaps. Each can be dismissed.
 - **Follow-up questions retrieve on the latest message only**, so a short follow-up such as "and when is it?" finds weaker matches than a full question.
 - **The source cutoff is tuned on a small sample.** A correct answer whose best match scores below `CITATION_MIN_SCORE` is shown without sources.
+- **A verified quote is proven to be in the note, not proven to be the best support.** The check confirms the wording exists in your notes; choosing which passage to quote is still the model's judgement, or a keyword match in the fallback.
+- **Quotes can include a section heading.** Notes are stored as running text, so a heading that sat on its own line can appear at the start of the sentence after it.
+- **The larger chat model uses the free Workers AI allowance about twice as fast** as the 8B model it replaced.
 - **Token counts are estimated** (about 4 characters per token), so chunks are somewhat shorter than 500 real tokens.
 - **Free-tier quota.** When the daily Workers AI allowance runs out, questions and new notes fail with an error until it resets.
 - **Test coverage is thin.** Only the text cleaning and chunking code has unit tests.

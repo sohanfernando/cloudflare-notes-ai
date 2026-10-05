@@ -14,8 +14,9 @@ enabled = true
 
 # Production values. Local development overrides these from .dev.vars.
 [vars]
-# Llama 3.1 8B: Workers AI has retired Llama 3 8B, the model the local `llama3` setup mirrors.
-LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
+# A large model follows the prompt's "answer only from the context" and "quote word for word"
+# rules far more reliably than an 8B one, at roughly twice the Workers AI cost per question.
+LLM_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
 # With bge-base, unrelated text has scored up to 0.54 and real matches 0.59 and up.
 CITATION_MIN_SCORE = "0.56"

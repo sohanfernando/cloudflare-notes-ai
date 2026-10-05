@@ -4,9 +4,18 @@ import {
   type ChatDataParts,
   type Citation,
   type NoteSummary,
+  type Quote,
 } from '@shared/types'
 import { DefaultChatTransport, type UIMessage } from 'ai'
-import { BookOpenIcon, ChevronDownIcon, MessageSquareIcon, RotateCcwIcon, SquarePenIcon } from 'lucide-react'
+import {
+  BadgeCheckIcon,
+  BookOpenIcon,
+  ChevronDownIcon,
+  MessageSquareIcon,
+  RotateCcwIcon,
+  SquarePenIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { useImperativeHandle, useState, type Ref } from 'react'
 import {
   Conversation,
@@ -32,6 +41,7 @@ import { Sources, SourcesContent, SourcesTrigger } from '@/components/ai-element
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { parseErrorMessage } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 type ChatMessage = UIMessage<never, ChatDataParts>
 
@@ -46,6 +56,10 @@ function textOf(message: ChatMessage): string {
 
 function citationsOf(message: ChatMessage): Citation[] {
   return message.parts.flatMap((part) => (part.type === 'data-citations' ? part.data : []))
+}
+
+function quotesOf(message: ChatMessage): Quote[] {
+  return message.parts.flatMap((part) => (part.type === 'data-quotes' ? part.data : []))
 }
 
 /** What the rest of the app can ask the chat to do. */
@@ -195,6 +209,7 @@ export function ChatPanel({ notes, onAnswered, ref }: ChatPanelProps) {
 function ChatMessageView({ message }: { message: ChatMessage }) {
   const text = textOf(message)
   const citations = citationsOf(message)
+  const quotes = quotesOf(message)
   if (!text) return null
 
   return (
@@ -206,8 +221,47 @@ function ChatMessageView({ message }: { message: ChatMessage }) {
           <MessageResponse>{text}</MessageResponse>
         )}
       </MessageContent>
+      {quotes.length > 0 && <QuoteList quotes={quotes} />}
       {citations.length > 0 && <CitationList citations={citations} />}
     </Message>
+  )
+}
+
+/**
+ * Passages backing an answer. The server has checked each one against the
+ * user's notes; one it could not find word for word is shown as such, not hidden.
+ */
+function QuoteList({ quotes }: { quotes: Quote[] }) {
+  return (
+    <ul aria-label="Quotes from your notes" className="flex flex-col gap-2">
+      {quotes.map((quote) => (
+        <li
+          className={cn(
+            'border-l-2 py-0.5 pl-3',
+            quote.verified ? 'border-emerald-500' : 'border-amber-500',
+          )}
+          key={quote.text}
+        >
+          <blockquote className="break-words text-sm">“{quote.text}”</blockquote>
+          <p className="mt-1 flex items-start gap-1.5 text-muted-foreground text-xs">
+            {quote.verified ? (
+              <>
+                <BadgeCheckIcon className="mt-px size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span className="min-w-0 break-words">
+                  Found word for word in{' '}
+                  <span className="font-medium text-foreground">{quote.noteTitle}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <TriangleAlertIcon className="mt-px size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Not found word for word in your notes</span>
+              </>
+            )}
+          </p>
+        </li>
+      ))}
+    </ul>
   )
 }
 

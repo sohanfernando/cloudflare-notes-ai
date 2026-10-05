@@ -3,6 +3,8 @@ import type { Env } from "../types";
 
 /** Shorter messages are greetings or fragments, not questions worth tracking. */
 const MIN_QUESTION_WORDS = 3;
+/** Small talk gets "I don't know" too, but it is not something a note could answer. */
+const SMALL_TALK = /^\W*(hi|hello|hey|thanks|thank you|good (morning|afternoon|evening)|how are you)\b/i;
 const MAX_GAPS_LISTED = 50;
 /** How many open gaps each newly added piece of note text is compared with. */
 const MAX_GAPS_CHECKED = 20;
@@ -74,6 +76,7 @@ export async function trackGap(env: Env, userId: string, asked: AnsweredQuestion
       return;
     }
     if (asked.question.trim().split(/\s+/).length < MIN_QUESTION_WORDS) return;
+    if (SMALL_TALK.test(asked.question)) return;
 
     const now = Date.now();
     // Asking again without an answer also clears any suggestion, since it did not help.

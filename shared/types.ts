@@ -29,9 +29,20 @@ export interface Gap {
   suggestedNoteId: string | null;
 }
 
-/** Custom data parts of a chat message: citations travel to the browser as `data-citations`. */
+/** A passage offered as support for an answer. */
+export interface Quote {
+  text: string;
+  /** True only when the server found the text word for word in one of the user's notes. */
+  verified: boolean;
+  /** The chunk and note it was found in; null for an unverified quote. */
+  chunkId: string | null;
+  noteTitle: string | null;
+}
+
+/** Custom data parts of a chat message, sent to the browser as `data-citations` and `data-quotes`. */
 export type ChatDataParts = {
   citations: Citation[];
+  quotes: Quote[];
 };
 
 /** Most text one note can hold in total, however it was uploaded. */
