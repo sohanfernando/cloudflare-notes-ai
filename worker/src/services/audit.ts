@@ -1,4 +1,4 @@
-export type AuditAction = "note.create" | "note.delete";
+export type AuditAction = "note.create" | "note.append" | "note.delete";
 
 /**
  * Builds the audit row for a write. It is returned unexecuted so callers can

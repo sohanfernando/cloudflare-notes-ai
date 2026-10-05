@@ -20,6 +20,9 @@ export interface VectorStore {
   deleteByChunkIds(userId: string, chunkIds: string[]): Promise<void>;
 }
 
+/** IDs per Vectorize delete call; a large note has several hundred chunks. */
+const DELETE_BATCH_SIZE = 100;
+
 /**
  * Production store. The index needs a metadata index on `user_id`, created
  * before any vectors are inserted, for the query filter to apply.
@@ -48,7 +51,9 @@ class VectorizeStore implements VectorStore {
 
   // Vectorize deletes by ID only; callers pass IDs already read from D1 with a user_id filter.
   async deleteByChunkIds(_userId: string, chunkIds: string[]): Promise<void> {
-    if (chunkIds.length > 0) await this.index.deleteByIds(chunkIds);
+    for (let start = 0; start < chunkIds.length; start += DELETE_BATCH_SIZE) {
+      await this.index.deleteByIds(chunkIds.slice(start, start + DELETE_BATCH_SIZE));
+    }
   }
 }
 

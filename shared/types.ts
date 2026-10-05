@@ -22,6 +22,14 @@ export type ChatDataParts = {
   citations: Citation[];
 };
 
-export const MAX_NOTE_BYTES = 100 * 1024;
+/** Most text one note can hold in total, however it was uploaded. */
+export const MAX_NOTE_BYTES = 1024 * 1024;
+/** Most text the Worker accepts in a single request. */
+export const MAX_PART_BYTES = 100 * 1024;
+/**
+ * Size of the parts the browser splits a large note into. Kept well under
+ * MAX_PART_BYTES so each request does little work and embeds in one batch.
+ */
+export const UPLOAD_PART_BYTES = 48 * 1024;
 export const MAX_TITLE_CHARS = 200;
 export const MAX_QUESTION_CHARS = 500;

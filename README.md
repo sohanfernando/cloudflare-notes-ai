@@ -6,7 +6,8 @@ It runs entirely on Cloudflare's free tier (Workers, D1, Vectorize, Workers AI, 
 
 ## Features
 
-- Add, list and delete text notes of up to 100 KB each.
+- Add notes by pasting text or uploading a PDF, Word (.docx), text or Markdown file, up to 1 MB of text each.
+- List and delete notes.
 - Ask questions and get streamed answers grounded in your notes, with the source note and chunk shown under each answer.
 - Follow-up questions keep the context of the conversation.
 - Every user sees only their own notes. Login is handled by Cloudflare Access.
@@ -36,11 +37,13 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 
 ### Adding a note
 
-1. The text is cleaned (unicode normalised, whitespace collapsed) and checked against the size limit.
-2. It is split into chunks of about 500 tokens, each overlapping the previous one by about 50.
-3. Each chunk is embedded into a 768-dimension vector.
-4. Vectors are stored in the vector index, tagged with the user's ID.
-5. The note, its chunks and an audit row are written to D1 in one transaction.
+1. For an uploaded file, the browser extracts the text; the file itself is never sent to the server.
+2. Text larger than about 48 KB is sent as a series of parts. The first request creates the note and the rest append to it, so each request stays small.
+3. Each part is cleaned (unicode normalised, whitespace collapsed) and checked against the size limits.
+4. It is split into chunks of about 500 tokens, each overlapping the previous one by about 50.
+5. Each chunk is embedded into a 768-dimension vector.
+6. Vectors are stored in the vector index, tagged with the user's ID.
+7. The note text, its chunks and an audit row are written to D1 in one transaction.
 
 ### Asking a question
 
@@ -84,8 +87,8 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 │   └── src/
 │       ├── components/      notes-panel, chat-panel, ui/, ai-elements/
 │       ├── hooks/           use-notes, use-theme
-│       └── lib/             API client, formatting
-├── shared/types.ts          API types and limits used by both sides
+│       └── lib/             API client, reading uploaded files, formatting
+├── shared/                  API types, limits and note splitting used by both sides
 └── package.json             Shortcut scripts for the two packages
 ```
 
@@ -201,6 +204,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 | `GET` | `/api/me` | The current user's ID (their email) |
 | `GET` | `/api/notes` | List the user's notes |
 | `POST` | `/api/notes` | Add a note: `{ "title"?: string, "content": string }` |
+| `POST` | `/api/notes/:id/parts` | Append more text to a note: `{ "content": string }` |
 | `DELETE` | `/api/notes/:id` | Delete a note with its chunks and vectors |
 | `POST` | `/api/chat` | Ask a question; body and response follow the AI SDK `useChat` protocol |
 
@@ -209,8 +213,8 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **Authentication.** Cloudflare Access blocks unauthenticated requests at the edge. The Worker also verifies the token's signature, issuer and audience, so a request that reached it another way could not forge an identity.
 - **Data isolation.** Every D1 query filters by `user_id`, and every Vectorize query filters on `user_id` metadata. Deleting a note that belongs to someone else returns "not found".
 - **Secrets.** The Workers AI token is a Worker Secret. The browser never calls the AI API; all model calls go through the Worker. `.dev.vars` is gitignored.
-- **Input limits.** Notes up to 100 KB, titles up to 200 characters, questions up to 500 characters, request bodies up to 256 KB.
-- **Rate limiting.** 20 requests per minute per user across asking questions and adding notes, the two actions that use Workers AI.
+- **Input limits.** Notes up to 1 MB of text in total and 100 KB per request, titles up to 200 characters, questions up to 500 characters, request bodies up to 256 KB.
+- **Rate limiting.** Per user, 20 questions per minute and 60 note-upload requests per minute. These are the two actions that use Workers AI; a 1 MB note takes about 22 upload requests.
 - **Prompt control.** Only the server sets the system prompt; a client message with the `system` role is rejected.
 - **Injection.** All SQL uses prepared statements. Model output is rendered as markdown with raw HTML disabled.
 - **Audit log.** Every note creation and deletion is recorded in `audit_log` with the user and time.
@@ -224,4 +228,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **Token counts are estimated** (about 4 characters per token), so chunks are somewhat shorter than 500 real tokens.
 - **Free-tier quota.** When the daily Workers AI allowance runs out, questions and new notes fail with an error until it resets.
 - **Test coverage is thin.** Only the text cleaning and chunking code has unit tests.
-- **Not yet verified in production:** isolation between two different accounts, notes close to the 100 KB limit, and preview deployments for pull requests.
+- **Scanned documents are not supported.** A PDF that contains only images of pages has no text to extract. Old Word files (.doc) are not supported either.
+- **Free-tier storage is small.** Vectorize's free plan holds roughly 6,500 chunks across all users, which is about 10 MB of note text in total.
+- **A failed upload is rolled back by the browser.** If a large upload fails partway and the clean-up request fails too, a partial note remains and has to be deleted by hand.
+- **Not yet verified in production:** large uploads, and preview deployments for pull requests.

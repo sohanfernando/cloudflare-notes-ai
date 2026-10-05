@@ -31,8 +31,14 @@ database_id = "117ca853-3d27-4082-98d8-b9f0b48607f1"
 binding = "VECTORIZE"
 index_name = "notes-ai-index"
 
-# Per-user limit on the routes that call the AI models (asking a question, adding a note).
+# Per-user limit on asking questions.
 [[ratelimits]]
 name = "AI_RATE_LIMITER"
 namespace_id = "1001"
 simple = { limit = 20, period = 60 }
+
+# Per-user limit on adding note text. A 1 MB note is uploaded as about 22 requests.
+[[ratelimits]]
+name = "INGEST_RATE_LIMITER"
+namespace_id = "1002"
+simple = { limit = 60, period = 60 }

@@ -1,6 +1,10 @@
+const KB = 1024
+const MB = 1024 * KB
+
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < KB) return `${bytes} B`
+  if (bytes < MB) return `${(bytes / KB).toFixed(1)} KB`
+  return `${(bytes / MB).toFixed(1)} MB`
 }
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })

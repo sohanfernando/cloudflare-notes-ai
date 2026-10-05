@@ -51,6 +51,16 @@ export async function createNote(input: { title: string; content: string }): Pro
   return note
 }
 
+/** Adds another part of text to an existing note; used to upload notes larger than one request. */
+export async function appendToNote(id: string, content: string): Promise<NoteSummary> {
+  const { note } = await request<{ note: NoteSummary }>(`/notes/${encodeURIComponent(id)}/parts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  return note
+}
+
 export async function deleteNote(id: string): Promise<void> {
   await request<void>(`/notes/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
