@@ -93,7 +93,7 @@ export function ChatPanel({ notes }: { notes: NoteSummary[] }) {
               description={
                 notes.length === 0
                   ? 'Add a note first, then ask a question about it.'
-                  : 'Answers come only from your own notes, with the sources shown under each one. Pick a note below to ask about just that one.'
+                  : 'Answers come only from your own notes, with the sources shown under each one. Choose a note below to ask about just that one.'
               }
               icon={<MessageSquareIcon className="size-8" />}
               title="Ask your notes"
@@ -122,6 +122,27 @@ export function ChatPanel({ notes }: { notes: NoteSummary[] }) {
       </Conversation>
 
       <div className="mx-auto w-full max-w-3xl p-4 pt-0">
+        {/* Kept outside the form on purpose: PromptInput resets its form after every
+            question, and a select inside it would snap back to "All notes". */}
+        {notes.length > 0 && (
+          <div className="mb-2 flex items-center gap-1 text-muted-foreground text-sm">
+            <span className="shrink-0">Ask about</span>
+            <PromptInputSelect onValueChange={setSelectedNoteId} value={scope?.id ?? ALL_NOTES}>
+              <PromptInputSelectTrigger aria-label="Note to ask about" className="min-w-0 max-w-72" size="sm">
+                <BookOpenIcon />
+                <PromptInputSelectValue />
+              </PromptInputSelectTrigger>
+              <PromptInputSelectContent align="start" className="max-w-80" position="popper" side="top">
+                <PromptInputSelectItem value={ALL_NOTES}>All notes</PromptInputSelectItem>
+                {notes.map((note) => (
+                  <PromptInputSelectItem key={note.id} value={note.id}>
+                    {note.title}
+                  </PromptInputSelectItem>
+                ))}
+              </PromptInputSelectContent>
+            </PromptInputSelect>
+          </div>
+        )}
         <PromptInput onSubmit={handleSubmit}>
           <PromptInputBody>
             <PromptInputTextarea
@@ -134,24 +155,8 @@ export function ChatPanel({ notes }: { notes: NoteSummary[] }) {
             />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputTools className="min-w-0">
-              {notes.length > 0 && (
-                <PromptInputSelect onValueChange={setSelectedNoteId} value={scope?.id ?? ALL_NOTES}>
-                  <PromptInputSelectTrigger aria-label="Note to ask about" className="max-w-56 min-w-0">
-                    <BookOpenIcon />
-                    <PromptInputSelectValue />
-                  </PromptInputSelectTrigger>
-                  <PromptInputSelectContent align="start" className="max-w-80" position="popper" side="top">
-                    <PromptInputSelectItem value={ALL_NOTES}>All notes</PromptInputSelectItem>
-                    {notes.map((note) => (
-                      <PromptInputSelectItem key={note.id} value={note.id}>
-                        {note.title}
-                      </PromptInputSelectItem>
-                    ))}
-                  </PromptInputSelectContent>
-                </PromptInputSelect>
-              )}
-              <span className="shrink-0 px-2 text-muted-foreground text-xs">
+            <PromptInputTools>
+              <span className="px-2 text-muted-foreground text-xs">
                 {input.length}/{MAX_QUESTION_CHARS}
               </span>
             </PromptInputTools>
