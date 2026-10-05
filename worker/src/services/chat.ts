@@ -3,12 +3,12 @@ import {
   createUIMessageStreamResponse,
   streamText,
   toUIMessageStream,
-  type InferUIMessageChunk,
   type ToolSet,
 } from "ai";
 import type { Citation } from "../../../shared/types";
 import { chatModel, embedTexts } from "../lib/ai";
 import { AnswerStreamFilter, checkQuotes, resolveReply } from "../lib/quotes";
+import { shapeReply, type ChatChunk } from "../lib/reply-stream";
 import { createVectorStore } from "../lib/vector-store";
 import type { ChatMessage, Env } from "../types";
 import type { ChatRequest } from "../validation/chat";
@@ -27,6 +27,13 @@ const UNKNOWN_ANSWER = /^\W*i (don['’]t|do not) know/i;
 
 const NO_NOTES_ANSWER =
   "I couldn't find anything in your notes to answer from. Add a note first, then ask again.";
+/**
+ * Ceiling on the model's reply. Workers AI stops at 256 tokens unless told
+ * otherwise, which cut replies with long quotes off part-way through.
+ */
+const MAX_REPLY_TOKENS = 700;
+
+const MODEL_FAILED_ANSWER = "The language model failed to respond. Please try again in a moment.";
 const EMPTY_REPLY_ANSWER =
   "I couldn't put together an answer from your notes. Please try asking again.";
 const NOTHING_IN_NOTE_ANSWER =
@@ -108,47 +115,12 @@ function buildInstructions(chunks: RetrievedChunk[]): string {
   return `You are a helpful assistant. Answer ONLY using the context below.
 If the answer is not in the context, say "I don't know."
 
-Write your answer first. Then, on a new line, write QUOTES: and under it list one to three short passages from the context that support your answer, one per line, like this:
+Write your answer first. Then, on a new line, write QUOTES: and under it list at most three short passages from the context that support your answer, one per line, like this:
 [1] "a passage copied from source 1"
-Copy each passage word for word from the context. Do not reword, correct or shorten it. If you answered "I don't know", do not write a QUOTES section.
+Each passage must be a single sentence or line of no more than 30 words, copied word for word from the context. Do not reword or correct it. If you answered "I don't know", do not write a QUOTES section.
 
 Context:
 ${context}`;
-}
-
-type ChatChunk = InferUIMessageChunk<ChatMessage>;
-
-/**
- * Removes the model's QUOTES section from the answer as it streams. The
- * section is read from the complete reply instead, checked, and sent to the
- * browser as data, so the reader never sees the model's raw version of it.
- * If the model wrote no answer before its quotes, one is supplied at the end.
- */
-function hideQuotesSection(
-  stream: ReadableStream<ChatChunk>,
-  chunks: RetrievedChunk[],
-): ReadableStream<ChatChunk> {
-  const filter = new AnswerStreamFilter();
-  return stream.pipeThrough(
-    new TransformStream<ChatChunk, ChatChunk>({
-      transform(chunk, controller) {
-        if (chunk.type === "text-delta") {
-          const visible = filter.push(chunk.delta);
-          if (visible) controller.enqueue({ ...chunk, delta: visible });
-        } else if (chunk.type === "text-end") {
-          const held = filter.end();
-          if (held) controller.enqueue({ type: "text-delta", id: chunk.id, delta: held });
-          if (!filter.hasShownText) {
-            const { answer } = resolveReply(filter.reply, chunks);
-            controller.enqueue({ type: "text-delta", id: chunk.id, delta: answer || EMPTY_REPLY_ANSWER });
-          }
-          controller.enqueue(chunk);
-        } else {
-          controller.enqueue(chunk);
-        }
-      },
-    }),
-  );
 }
 
 /**
@@ -163,6 +135,38 @@ export async function answerQuestion(
   runInBackground: (work: Promise<unknown>) => void,
 ): Promise<Response> {
   const { embedding, chunks } = await retrieve(env, userId, request.question, request.noteId);
+
+  /** Works out what accompanies a finished reply: its sources, its checked quotes, and its gap. */
+  const describeReply = async (reply: string): Promise<ChatChunk[]> => {
+    const { answer, quotesBlock } = resolveReply(reply, chunks);
+    // A reply with nothing usable in it is neither an answer nor a gap in the notes.
+    if (!answer) return [];
+    const answered = !UNKNOWN_ANSWER.test(answer);
+    const described: ChatChunk[] = [];
+
+    const citations = selectCitations(env, chunks, answer);
+    if (citations.length > 0) described.push({ type: "data-citations", data: citations });
+
+    if (answered) {
+      const cited = chunks.filter((chunk) =>
+        citations.some((citation) => citation.chunkId === chunk.chunkId),
+      );
+      const quotes = checkQuotes(answer, quotesBlock, chunks, cited);
+      if (quotes.length > 0) described.push({ type: "data-quotes", data: quotes });
+    }
+
+    const tracking = trackGap(env, userId, {
+      question: request.question,
+      embedding,
+      bestScore: chunks[0]?.score ?? 0,
+      noteId: request.noteId,
+      answered,
+    });
+    runInBackground(tracking);
+    // Awaited so the browser's reload of the gaps list, on finish, sees the change.
+    await tracking;
+    return described;
+  };
 
   const stream = createUIMessageStream<ChatMessage>({
     execute: ({ writer }) => {
@@ -183,46 +187,29 @@ export async function answerQuestion(
         model: chatModel(env),
         instructions: buildInstructions(chunks),
         messages: [...request.history, { role: "user", content: request.question }],
-        // Sources and quotes are worked out once the reply is complete, since they depend on it.
-        onEnd: async ({ text }) => {
-          const { answer, quotesBlock } = resolveReply(text, chunks);
-          // A reply with nothing usable in it is neither an answer nor a gap in the notes.
-          if (!answer) return;
-          const answered = !UNKNOWN_ANSWER.test(answer);
-
-          const citations = selectCitations(env, chunks, answer);
-          if (citations.length > 0) writer.write({ type: "data-citations", data: citations });
-
-          if (answered) {
-            const cited = chunks.filter((chunk) =>
-              citations.some((citation) => citation.chunkId === chunk.chunkId),
-            );
-            const quotes = checkQuotes(answer, quotesBlock, chunks, cited);
-            if (quotes.length > 0) writer.write({ type: "data-quotes", data: quotes });
-          }
-
-          const tracking = trackGap(env, userId, {
-            question: request.question,
-            embedding,
-            bestScore: chunks[0]?.score ?? 0,
-            noteId: request.noteId,
-            answered,
-          });
-          runInBackground(tracking);
-          // Awaited so the browser's reload of the gaps list, on finish, sees the change.
-          await tracking;
+        maxOutputTokens: MAX_REPLY_TOKENS,
+      });
+      const modelOutput = toUIMessageStream<ToolSet, ChatMessage>({
+        stream: result.stream,
+        sendStart: false,
+        onError: (error) => {
+          console.error("model stream failed", error);
+          return MODEL_FAILED_ANSWER;
         },
       });
+
+      // Sources and quotes depend on the whole reply, so shapeReply adds them at
+      // the end, and does so even when the model's stream stops without finishing.
       writer.merge(
-        hideQuotesSection(
-          toUIMessageStream<ToolSet, ChatMessage>({ stream: result.stream, sendStart: false }),
-          chunks,
-        ),
+        shapeReply(modelOutput, new AnswerStreamFilter(), {
+          answerFor: (reply) => resolveReply(reply, chunks).answer || EMPTY_REPLY_ANSWER,
+          describe: describeReply,
+        }),
       );
     },
     onError: (error) => {
       console.error("chat stream failed", error);
-      return "The language model failed to respond. Please try again in a moment.";
+      return MODEL_FAILED_ANSWER;
     },
   });
 
