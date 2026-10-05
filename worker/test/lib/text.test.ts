@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chunkText, cleanText } from "./text.ts";
+import { chunkText, cleanText } from "../../src/lib/text.ts";
 
 test("cleanText collapses whitespace and keeps paragraph breaks", () => {
   assert.equal(cleanText("  a \t b\r\n\r\n\r\n\r\nc  \n d "), "a b\n\nc\nd");

@@ -6,7 +6,7 @@ import {
   resolveReply,
   splitAnswer,
   type QuoteSource,
-} from "./quotes.ts";
+} from "../../src/lib/quotes.ts";
 
 const handbook: QuoteSource = {
   chunkId: "note-1:0",

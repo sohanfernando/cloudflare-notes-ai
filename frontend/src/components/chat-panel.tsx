@@ -78,8 +78,20 @@ interface ChatPanelProps {
 export function ChatPanel({ notes, onAnswered, ref }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [selectedNoteId, setSelectedNoteId] = useState(ALL_NOTES)
+  // What the server says it is doing before an answer starts, e.g. waiting for a new note to be indexed.
+  const [serverStatus, setServerStatus] = useState<string | null>(null)
   const { messages, sendMessage, setMessages, regenerate, clearError, stop, status, error } =
-    useChat<ChatMessage>({ transport, onFinish: onAnswered })
+    useChat<ChatMessage>({
+      transport,
+      onData: (part) => {
+        if (part.type === 'data-status') setServerStatus(part.data.message)
+      },
+      onFinish: () => {
+        setServerStatus(null)
+        onAnswered()
+      },
+      onError: () => setServerStatus(null),
+    })
 
   // Looked up on every render, so the picker falls back to "All notes" if the note is deleted.
   const scope = notes.find((note) => note.id === selectedNoteId)
@@ -141,7 +153,8 @@ export function ChatPanel({ notes, onAnswered, ref }: ChatPanelProps) {
           )}
           {waiting && (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Spinner /> {scope ? `Searching ${scope.title}…` : 'Searching your notes…'}
+              <Spinner />{' '}
+              {serverStatus ?? (scope ? `Searching ${scope.title}…` : 'Searching your notes…')}
             </div>
           )}
           {error && (

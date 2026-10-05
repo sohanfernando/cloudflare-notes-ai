@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute notes-ai-db --local --file=db/schema.sql && wrangler d1 execute notes-ai-db --local --file=db/schema.local.sql",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"src/**/*.test.ts\" \"../shared/**/*.test.ts\""
+    "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.62",

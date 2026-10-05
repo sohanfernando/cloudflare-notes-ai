@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AnswerStreamFilter } from "./quotes.ts";
-import { shapeReply, type ChatChunk } from "./reply-stream.ts";
+import { AnswerStreamFilter } from "../../src/lib/quotes.ts";
+import { shapeReply, type ChatChunk } from "../../src/lib/reply-stream.ts";
 
 const QUOTES: ChatChunk = {
   type: "data-quotes",

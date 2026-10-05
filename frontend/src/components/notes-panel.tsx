@@ -98,7 +98,7 @@ function AddNoteForm({ onAdd }: Pick<NotesPanelProps, 'onAdd'>) {
   const tooLarge = size > MAX_NOTE_BYTES
   const busy = reading || saving
 
-  // The vector index takes a few seconds to pick up a new note, so say so for a while.
+  // The vector index takes a while to pick up a new note, so say so for a while.
   useEffect(() => {
     if (!justAdded) return
     const timer = setTimeout(() => setJustAdded(false), INDEXING_HINT_MS)
@@ -212,7 +212,8 @@ function AddNoteForm({ onAdd }: Pick<NotesPanelProps, 'onAdd'>) {
       {error && <p className="text-destructive text-sm">{error}</p>}
       {justAdded && (
         <p className="text-muted-foreground text-xs" role="status">
-          Note added. It can take a few seconds before answers start using it.
+          Note added. It can take up to a minute to become searchable; a question asked sooner
+          waits for it.
         </p>
       )}
     </form>

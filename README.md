@@ -52,8 +52,8 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 
 1. The question is embedded with the same model.
 2. The vector index returns the 5 most similar chunks, filtered to the current user and, if a note is selected, to that note.
-3. The chunk text is read from D1, again filtered by user.
-4. The model is told to answer only from those chunks, to say "I don't know" otherwise, and to end its reply with a `QUOTES:` section of passages copied from them.
+3. The chunk text is read from D1, again filtered by user. If the search finds nothing although the user has note text stored, the index has not caught up with a recent upload: the app shows "still being indexed" and retries every 3 seconds for up to 45 seconds.
+4. The model is told to answer only from those chunks, to say "I don't know" otherwise, and to end its reply with a `QUOTES:` section of passages copied from them. Replies are capped at 700 tokens; Workers AI otherwise stops at 256, which is too short for an answer plus quotes.
 5. The answer streams to the browser. The `QUOTES:` section is cut out of the stream as it passes, so it is never displayed as the model wrote it.
 6. When the reply is complete, the chunks that scored well enough are sent as its sources, and the quotes are checked and sent (see below).
 
@@ -67,6 +67,8 @@ The model's quotes are treated as claims to check, never as facts.
 4. If the model skips the answer and writes only quotes, the verified ones are shown as the answer.
 
 Because of steps 3 and 4, the feature does not depend on the model following the format.
+
+It does not depend on the reply ending cleanly either. Sources and quotes are worked out from whatever text arrived, so a reply that is cut off, or fails after the answer is on screen, still shows them and is not reported as an error.
 
 ### Gaps
 
@@ -101,7 +103,8 @@ Because of steps 3 and 4, the feature does not depend on the model following the
 │   │   ├── middleware/      Authentication, rate limiting, error handling
 │   │   ├── validation/      Request parsing and input limits
 │   │   ├── services/        Notes, chat (retrieval and answer), gaps, audit log
-│   │   └── lib/             JWT verification, AI calls, chunking, vector store
+│   │   └── lib/             JWT verification, AI calls, chunking, quotes, reply stream, vector store
+│   ├── test/                Unit tests, mirroring src/lib and shared/
 │   ├── wrangler.toml        Worker configuration and bindings
 │   └── .dev.vars.example    Local settings template
 ├── frontend/                React app
@@ -245,7 +248,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 
 ## Limitations
 
-- **New notes are not searchable instantly in production.** Vectorize indexes in the background, usually within a few seconds. The same delay applies to deletions.
+- **New notes are not searchable instantly in production.** Vectorize indexes in the background, which can take up to a minute. A question asked in that window waits for the note, up to 45 seconds, and then asks you to try again. Two cases are not covered: while a large upload is still being indexed, an answer may draw on only the parts indexed so far; and a deleted note can keep appearing in answers for a short time.
 - **Notes cannot be viewed or edited** after they are added; the list shows only title, date and size.
 - **Gaps are recorded by wording.** A follow-up such as "and how often?" is saved as its own gap even though it only made sense in its conversation, and two differently worded versions of one question are two gaps. Each can be dismissed.
 - **Follow-up questions retrieve on the latest message only**, so a short follow-up such as "and when is it?" finds weaker matches than a full question.
@@ -255,8 +258,8 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **The larger chat model uses the free Workers AI allowance about twice as fast** as the 8B model it replaced.
 - **Token counts are estimated** (about 4 characters per token), so chunks are somewhat shorter than 500 real tokens.
 - **Free-tier quota.** When the daily Workers AI allowance runs out, questions and new notes fail with an error until it resets.
-- **Test coverage is thin.** Only the text cleaning and chunking code has unit tests.
+- **Tests cover the logic, not the wiring.** The unit tests in `worker/test` cover text cleaning and chunking, splitting uploads into parts, quote checking, the reply stream and the retry loop. Routes, database queries and the frontend are tested by hand.
 - **Scanned documents are not supported.** A PDF that contains only images of pages has no text to extract. Old Word files (.doc) are not supported either.
 - **Free-tier storage is small.** Vectorize's free plan holds roughly 6,500 chunks across all users, which is about 10 MB of note text in total.
 - **A failed upload is rolled back by the browser.** If a large upload fails partway and the clean-up request fails too, a partial note remains and has to be deleted by hand.
-- **Not yet verified in production:** large uploads, and preview deployments for pull requests.
+- **Not yet verified in production:** the rate limits (tested locally only), and preview deployments for pull requests.

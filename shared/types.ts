@@ -39,10 +39,15 @@ export interface Quote {
   noteTitle: string | null;
 }
 
-/** Custom data parts of a chat message, sent to the browser as `data-citations` and `data-quotes`. */
+/**
+ * Custom data parts of a chat message, sent to the browser as `data-citations`,
+ * `data-quotes` and `data-status`. A status is transient: it says what the
+ * server is doing before the answer starts and is not kept in the message.
+ */
 export type ChatDataParts = {
   citations: Citation[];
   quotes: Quote[];
+  status: { message: string };
 };
 
 /** Most text one note can hold in total, however it was uploaded. */

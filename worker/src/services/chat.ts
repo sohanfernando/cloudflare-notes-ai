@@ -4,11 +4,13 @@ import {
   streamText,
   toUIMessageStream,
   type ToolSet,
+  type UIMessageStreamWriter,
 } from "ai";
 import type { Citation } from "../../../shared/types";
 import { chatModel, embedTexts } from "../lib/ai";
 import { AnswerStreamFilter, checkQuotes, resolveReply } from "../lib/quotes";
 import { shapeReply, type ChatChunk } from "../lib/reply-stream";
+import { retryUntilFound } from "../lib/retry";
 import { createVectorStore } from "../lib/vector-store";
 import type { ChatMessage, Env } from "../types";
 import type { ChatRequest } from "../validation/chat";
@@ -36,8 +38,16 @@ const MAX_REPLY_TOKENS = 700;
 const MODEL_FAILED_ANSWER = "The language model failed to respond. Please try again in a moment.";
 const EMPTY_REPLY_ANSWER =
   "I couldn't put together an answer from your notes. Please try asking again.";
-const NOTHING_IN_NOTE_ANSWER =
-  "I couldn't find anything in the selected note. If you just added it, wait a few seconds and ask again.";
+const NOTHING_IN_NOTE_ANSWER = "I couldn't find anything in the selected note.";
+
+// Vectorize makes new vectors searchable some time after they are stored. A
+// question asked inside that window finds nothing, so it is retried for a while.
+const INDEXING_RETRY_MS = 3000;
+const INDEXING_MAX_WAIT_MS = 45_000;
+const INDEXING_NOTE_STATUS = "This note is still being indexed. Waiting for it to become searchable…";
+const INDEXING_NOTES_STATUS = "Your notes are still being indexed. Waiting for them to become searchable…";
+const STILL_INDEXING_ANSWER =
+  "Your notes are taking longer than usual to become searchable. Please ask again in a minute.";
 
 interface RetrievedChunk extends Citation {
   content: string;
@@ -123,6 +133,23 @@ Context:
 ${context}`;
 }
 
+/** True if the user has note text stored, in one note or in any, whether or not it is searchable yet. */
+async function hasStoredChunks(env: Env, userId: string, noteId?: string): Promise<boolean> {
+  const statement = noteId
+    ? env.DB.prepare("SELECT 1 FROM chunks WHERE user_id = ? AND note_id = ? LIMIT 1").bind(userId, noteId)
+    : env.DB.prepare("SELECT 1 FROM chunks WHERE user_id = ? LIMIT 1").bind(userId);
+  return (await statement.first()) !== null;
+}
+
+/** Writes a complete reply that did not come from the model. */
+function writeFixedAnswer(writer: UIMessageStreamWriter<ChatMessage>, text: string): void {
+  const id = crypto.randomUUID();
+  writer.write({ type: "text-start", id });
+  writer.write({ type: "text-delta", id, delta: text });
+  writer.write({ type: "text-end", id });
+  writer.write({ type: "finish" });
+}
+
 /**
  * Retrieves context for the question and streams a grounded answer with its
  * citations. `runInBackground` receives work that may still be running when
@@ -134,54 +161,70 @@ export async function answerQuestion(
   request: ChatRequest,
   runInBackground: (work: Promise<unknown>) => void,
 ): Promise<Response> {
-  const { embedding, chunks } = await retrieve(env, userId, request.question, request.noteId);
-
-  /** Works out what accompanies a finished reply: its sources, its checked quotes, and its gap. */
-  const describeReply = async (reply: string): Promise<ChatChunk[]> => {
-    const { answer, quotesBlock } = resolveReply(reply, chunks);
-    // A reply with nothing usable in it is neither an answer nor a gap in the notes.
-    if (!answer) return [];
-    const answered = !UNKNOWN_ANSWER.test(answer);
-    const described: ChatChunk[] = [];
-
-    const citations = selectCitations(env, chunks, answer);
-    if (citations.length > 0) described.push({ type: "data-citations", data: citations });
-
-    if (answered) {
-      const cited = chunks.filter((chunk) =>
-        citations.some((citation) => citation.chunkId === chunk.chunkId),
-      );
-      const quotes = checkQuotes(answer, quotesBlock, chunks, cited);
-      if (quotes.length > 0) described.push({ type: "data-quotes", data: quotes });
-    }
-
-    const tracking = trackGap(env, userId, {
-      question: request.question,
-      embedding,
-      bestScore: chunks[0]?.score ?? 0,
-      noteId: request.noteId,
-      answered,
-    });
-    runInBackground(tracking);
-    // Awaited so the browser's reload of the gaps list, on finish, sees the change.
-    await tracking;
-    return described;
-  };
+  const { noteId } = request;
+  const retrieval = await retrieve(env, userId, request.question, noteId);
+  const { embedding } = retrieval;
 
   const stream = createUIMessageStream<ChatMessage>({
-    execute: ({ writer }) => {
+    execute: async ({ writer }) => {
       writer.write({ type: "start" });
 
+      let chunks = retrieval.chunks;
       if (chunks.length === 0) {
-        // Nothing to ground an answer in, so reply directly instead of spending an LLM call.
-        const id = crypto.randomUUID();
-        writer.write({ type: "text-start", id });
-        const delta = request.noteId ? NOTHING_IN_NOTE_ANSWER : NO_NOTES_ANSWER;
-        writer.write({ type: "text-delta", id, delta });
-        writer.write({ type: "text-end", id });
-        writer.write({ type: "finish" });
-        return;
+        if (!(await hasStoredChunks(env, userId, noteId))) {
+          // Nothing to ground an answer in, so reply directly instead of spending an LLM call.
+          writeFixedAnswer(writer, noteId ? NOTHING_IN_NOTE_ANSWER : NO_NOTES_ANSWER);
+          return;
+        }
+
+        // The text is stored but the vector index has not caught up with it yet,
+        // which takes up to a minute after a note is added. Say so, and keep trying.
+        writer.write({
+          type: "data-status",
+          data: { message: noteId ? INDEXING_NOTE_STATUS : INDEXING_NOTES_STATUS },
+          transient: true,
+        });
+        chunks = await retryUntilFound(() => findChunks(env, userId, embedding, noteId), {
+          intervalMs: INDEXING_RETRY_MS,
+          maxWaitMs: INDEXING_MAX_WAIT_MS,
+        });
+        if (chunks.length === 0) {
+          writeFixedAnswer(writer, STILL_INDEXING_ANSWER);
+          return;
+        }
       }
+
+      /** Works out what accompanies a finished reply: its sources, its checked quotes, and its gap. */
+      const describeReply = async (reply: string): Promise<ChatChunk[]> => {
+        const { answer, quotesBlock } = resolveReply(reply, chunks);
+        // A reply with nothing usable in it is neither an answer nor a gap in the notes.
+        if (!answer) return [];
+        const answered = !UNKNOWN_ANSWER.test(answer);
+        const described: ChatChunk[] = [];
+
+        const citations = selectCitations(env, chunks, answer);
+        if (citations.length > 0) described.push({ type: "data-citations", data: citations });
+
+        if (answered) {
+          const cited = chunks.filter((chunk) =>
+            citations.some((citation) => citation.chunkId === chunk.chunkId),
+          );
+          const quotes = checkQuotes(answer, quotesBlock, chunks, cited);
+          if (quotes.length > 0) described.push({ type: "data-quotes", data: quotes });
+        }
+
+        const tracking = trackGap(env, userId, {
+          question: request.question,
+          embedding,
+          bestScore: chunks[0]?.score ?? 0,
+          noteId,
+          answered,
+        });
+        runInBackground(tracking);
+        // Awaited so the browser's reload of the gaps list, on finish, sees the change.
+        await tracking;
+        return described;
+      };
 
       const result = streamText({
         model: chatModel(env),
