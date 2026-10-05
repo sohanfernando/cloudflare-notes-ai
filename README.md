@@ -9,6 +9,7 @@ It runs entirely on Cloudflare's free tier (Workers, D1, Vectorize, Workers AI, 
 - Add notes by pasting text or uploading a PDF, Word (.docx), text or Markdown file, up to 1 MB of text each.
 - List and delete notes.
 - Ask questions and get streamed answers grounded in your notes, with the source note and chunk shown under each answer.
+- Ask across all your notes, or pick one note in the chat box to ask about only that one.
 - Follow-up questions keep the context of the conversation.
 - Every user sees only their own notes. Login is handled by Cloudflare Access.
 - Works on phones, with light and dark themes.
@@ -48,7 +49,7 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 ### Asking a question
 
 1. The question is embedded with the same model.
-2. The vector index returns the 5 most similar chunks, filtered to the current user.
+2. The vector index returns the 5 most similar chunks, filtered to the current user and, if a note is selected, to that note.
 3. The chunk text is read from D1, again filtered by user.
 4. The model is told to answer only from those chunks, and to say "I don't know" otherwise.
 5. The answer streams to the browser. When it finishes, the chunks that scored well enough are sent as its sources.
@@ -170,13 +171,14 @@ Locally, all values come from `worker/.dev.vars`. In production they come from t
 Everything here fits in the free plans. To deploy your own copy:
 
 1. **D1.** In the dashboard, create a database named `notes-ai-db` and run `worker/db/schema.sql` in its console. Put the database ID in `worker/wrangler.toml`.
-2. **Vectorize.** The dashboard cannot create indexes, so this step needs the CLI. Create the metadata index before adding any notes; vectors inserted earlier are not covered by the per-user filter.
+2. **Vectorize.** The dashboard cannot create indexes, so this step needs the CLI. Create both metadata indexes before adding any notes: a vector inserted before an index existed is invisible to that index's filter until its note is deleted and added again.
 
    ```sh
    cd worker
    npx wrangler login
    npx wrangler vectorize create notes-ai-index --dimensions=768 --metric=cosine
    npx wrangler vectorize create-metadata-index notes-ai-index --property-name=user_id --type=string
+   npx wrangler vectorize create-metadata-index notes-ai-index --property-name=note_id --type=string
    ```
 
 3. **Workers Builds.** Push the repository to GitHub, then in Workers & Pages choose Create → Import a repository, with:
@@ -206,12 +208,12 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 | `POST` | `/api/notes` | Add a note: `{ "title"?: string, "content": string }` |
 | `POST` | `/api/notes/:id/parts` | Append more text to a note: `{ "content": string }` |
 | `DELETE` | `/api/notes/:id` | Delete a note with its chunks and vectors |
-| `POST` | `/api/chat` | Ask a question; body and response follow the AI SDK `useChat` protocol |
+| `POST` | `/api/chat` | Ask a question; body and response follow the AI SDK `useChat` protocol. An optional `noteId` in the body limits the search to that note |
 
 ## Security
 
 - **Authentication.** Cloudflare Access blocks unauthenticated requests at the edge. The Worker also verifies the token's signature, issuer and audience, so a request that reached it another way could not forge an identity.
-- **Data isolation.** Every D1 query filters by `user_id`, and every Vectorize query filters on `user_id` metadata. Deleting a note that belongs to someone else returns "not found".
+- **Data isolation.** Every D1 query filters by `user_id`, and every Vectorize query filters on `user_id` metadata, including when a question is limited to one note. Deleting a note that belongs to someone else returns "not found".
 - **Secrets.** The Workers AI token is a Worker Secret. The browser never calls the AI API; all model calls go through the Worker. `.dev.vars` is gitignored.
 - **Input limits.** Notes up to 1 MB of text in total and 100 KB per request, titles up to 200 characters, questions up to 500 characters, request bodies up to 256 KB.
 - **Rate limiting.** Per user, 20 questions per minute and 60 note-upload requests per minute. These are the two actions that use Workers AI; a 1 MB note takes about 22 upload requests.

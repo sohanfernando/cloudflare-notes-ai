@@ -23,15 +23,22 @@ const UNKNOWN_ANSWER = /^\W*i (don['’]t|do not) know/i;
 
 const NO_NOTES_ANSWER =
   "I couldn't find anything in your notes to answer from. Add a note first, then ask again.";
+const NOTHING_IN_NOTE_ANSWER =
+  "I couldn't find anything in the selected note. If you just added it, wait a few seconds and ask again.";
 
 interface RetrievedChunk extends Citation {
   content: string;
 }
 
 /** Finds the user's chunks most similar to the question, best match first. */
-async function retrieve(env: Env, userId: string, question: string): Promise<RetrievedChunk[]> {
+async function retrieve(
+  env: Env,
+  userId: string,
+  question: string,
+  noteId?: string,
+): Promise<RetrievedChunk[]> {
   const [embedding] = await embedTexts(env, [question]);
-  const matches = await createVectorStore(env).query(userId, embedding!, TOP_K);
+  const matches = await createVectorStore(env).query(userId, embedding!, TOP_K, noteId);
   if (matches.length === 0) return [];
 
   // The vector store only returns IDs; the text is read from D1, again scoped to the user.
@@ -85,7 +92,7 @@ ${context}`;
 
 /** Retrieves context for the question and streams a grounded answer with its citations. */
 export async function answerQuestion(env: Env, userId: string, request: ChatRequest): Promise<Response> {
-  const chunks = await retrieve(env, userId, request.question);
+  const chunks = await retrieve(env, userId, request.question, request.noteId);
 
   const stream = createUIMessageStream<ChatMessage>({
     execute: ({ writer }) => {
@@ -95,7 +102,8 @@ export async function answerQuestion(env: Env, userId: string, request: ChatRequ
         // Nothing to ground an answer in, so reply directly instead of spending an LLM call.
         const id = crypto.randomUUID();
         writer.write({ type: "text-start", id });
-        writer.write({ type: "text-delta", id, delta: NO_NOTES_ANSWER });
+        const delta = request.noteId ? NOTHING_IN_NOTE_ANSWER : NO_NOTES_ANSWER;
+        writer.write({ type: "text-delta", id, delta });
         writer.write({ type: "text-end", id });
         writer.write({ type: "finish" });
         return;

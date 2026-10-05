@@ -83,7 +83,7 @@ export default function App() {
         <section
           className={cn('min-h-0 min-w-0 flex-1 flex-col md:flex', tab === 'chat' ? 'flex' : 'hidden')}
         >
-          <ChatPanel noteCount={notes.notes.length} />
+          <ChatPanel notes={notes.notes} />
         </section>
       </main>
     </div>

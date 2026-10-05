@@ -16,7 +16,8 @@ export interface VectorMatch {
 /** Vector index in which every read and delete is scoped to a single user. */
 export interface VectorStore {
   upsert(records: VectorRecord[]): Promise<void>;
-  query(userId: string, values: number[], topK: number): Promise<VectorMatch[]>;
+  /** Finds the user's most similar chunks, optionally only within one of their notes. */
+  query(userId: string, values: number[], topK: number, noteId?: string): Promise<VectorMatch[]>;
   deleteByChunkIds(userId: string, chunkIds: string[]): Promise<void>;
 }
 
@@ -24,8 +25,9 @@ export interface VectorStore {
 const DELETE_BATCH_SIZE = 100;
 
 /**
- * Production store. The index needs a metadata index on `user_id`, created
- * before any vectors are inserted, for the query filter to apply.
+ * Production store. The index needs metadata indexes on `user_id` and
+ * `note_id`, created before any vectors are inserted, for the query filters
+ * to apply. Vectors inserted before an index existed are invisible to its filter.
  */
 class VectorizeStore implements VectorStore {
   constructor(private readonly index: Vectorize) {}
@@ -40,10 +42,16 @@ class VectorizeStore implements VectorStore {
     );
   }
 
-  async query(userId: string, values: number[], topK: number): Promise<VectorMatch[]> {
+  async query(
+    userId: string,
+    values: number[],
+    topK: number,
+    noteId?: string,
+  ): Promise<VectorMatch[]> {
     const { matches } = await this.index.query(values, {
       topK,
-      filter: { user_id: userId },
+      // user_id is always part of the filter, so a note ID from another user matches nothing.
+      filter: noteId ? { user_id: userId, note_id: noteId } : { user_id: userId },
       returnMetadata: "none",
     });
     return matches.map((match) => ({ chunkId: match.id, score: match.score }));
@@ -73,11 +81,20 @@ class D1VectorStore implements VectorStore {
     );
   }
 
-  async query(userId: string, values: number[], topK: number): Promise<VectorMatch[]> {
-    const { results } = await this.db
-      .prepare("SELECT chunk_id, embedding FROM local_vectors WHERE user_id = ?")
-      .bind(userId)
-      .all<{ chunk_id: string; embedding: string }>();
+  async query(
+    userId: string,
+    values: number[],
+    topK: number,
+    noteId?: string,
+  ): Promise<VectorMatch[]> {
+    const statement = noteId
+      ? this.db
+          .prepare("SELECT chunk_id, embedding FROM local_vectors WHERE user_id = ? AND note_id = ?")
+          .bind(userId, noteId)
+      : this.db
+          .prepare("SELECT chunk_id, embedding FROM local_vectors WHERE user_id = ?")
+          .bind(userId);
+    const { results } = await statement.all<{ chunk_id: string; embedding: string }>();
 
     return results
       .map((row) => ({

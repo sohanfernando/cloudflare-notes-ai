@@ -1,5 +1,10 @@
 import { useChat } from '@ai-sdk/react'
-import { MAX_QUESTION_CHARS, type ChatDataParts, type Citation } from '@shared/types'
+import {
+  MAX_QUESTION_CHARS,
+  type ChatDataParts,
+  type Citation,
+  type NoteSummary,
+} from '@shared/types'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import { BookOpenIcon, ChevronDownIcon, MessageSquareIcon, RotateCcwIcon, SquarePenIcon } from 'lucide-react'
 import { useState } from 'react'
@@ -14,6 +19,11 @@ import {
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
@@ -27,6 +37,9 @@ type ChatMessage = UIMessage<never, ChatDataParts>
 
 const transport = new DefaultChatTransport<ChatMessage>({ api: '/api/chat' })
 
+/** Value of the note picker when questions search every note. */
+const ALL_NOTES = 'all'
+
 function textOf(message: ChatMessage): string {
   return message.parts.flatMap((part) => (part.type === 'text' ? part.text : [])).join('')
 }
@@ -35,10 +48,15 @@ function citationsOf(message: ChatMessage): Citation[] {
   return message.parts.flatMap((part) => (part.type === 'data-citations' ? part.data : []))
 }
 
-export function ChatPanel({ noteCount }: { noteCount: number }) {
+export function ChatPanel({ notes }: { notes: NoteSummary[] }) {
   const [input, setInput] = useState('')
+  const [selectedNoteId, setSelectedNoteId] = useState(ALL_NOTES)
   const { messages, sendMessage, setMessages, regenerate, clearError, stop, status, error } =
     useChat<ChatMessage>({ transport })
+
+  // Looked up on every render, so the picker falls back to "All notes" if the note is deleted.
+  const scope = notes.find((note) => note.id === selectedNoteId)
+  const requestOptions = scope ? { body: { noteId: scope.id } } : undefined
 
   const busy = status === 'submitted' || status === 'streaming'
   const lastMessage = messages.at(-1)
@@ -50,7 +68,7 @@ export function ChatPanel({ noteCount }: { noteCount: number }) {
     if (!question || busy) return
     clearError()
     setInput('')
-    void sendMessage({ text: question })
+    void sendMessage({ text: question }, requestOptions)
   }
 
   const startNewChat = () => {
@@ -73,9 +91,9 @@ export function ChatPanel({ noteCount }: { noteCount: number }) {
           {messages.length === 0 ? (
             <ConversationEmptyState
               description={
-                noteCount === 0
+                notes.length === 0
                   ? 'Add a note first, then ask a question about it.'
-                  : 'Answers come only from your own notes, with the sources shown under each one.'
+                  : 'Answers come only from your own notes, with the sources shown under each one. Pick a note below to ask about just that one.'
               }
               icon={<MessageSquareIcon className="size-8" />}
               title="Ask your notes"
@@ -85,7 +103,7 @@ export function ChatPanel({ noteCount }: { noteCount: number }) {
           )}
           {waiting && (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Spinner /> Searching your notes…
+              <Spinner /> {scope ? `Searching ${scope.title}…` : 'Searching your notes…'}
             </div>
           )}
           {error && (
@@ -94,7 +112,7 @@ export function ChatPanel({ noteCount }: { noteCount: number }) {
               role="alert"
             >
               <span>{parseErrorMessage(error.message)}</span>
-              <Button onClick={() => void regenerate()} size="sm" variant="outline">
+              <Button onClick={() => void regenerate(requestOptions)} size="sm" variant="outline">
                 <RotateCcwIcon /> Try again
               </Button>
             </div>
@@ -109,13 +127,31 @@ export function ChatPanel({ noteCount }: { noteCount: number }) {
             <PromptInputTextarea
               maxLength={MAX_QUESTION_CHARS}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask a question about your notes…"
+              placeholder={
+                scope ? `Ask about ${scope.title}…` : 'Ask a question about your notes…'
+              }
               value={input}
             />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputTools>
-              <span className="px-2 text-muted-foreground text-xs">
+            <PromptInputTools className="min-w-0">
+              {notes.length > 0 && (
+                <PromptInputSelect onValueChange={setSelectedNoteId} value={scope?.id ?? ALL_NOTES}>
+                  <PromptInputSelectTrigger aria-label="Note to ask about" className="max-w-56 min-w-0">
+                    <BookOpenIcon />
+                    <PromptInputSelectValue />
+                  </PromptInputSelectTrigger>
+                  <PromptInputSelectContent align="start" className="max-w-80" position="popper" side="top">
+                    <PromptInputSelectItem value={ALL_NOTES}>All notes</PromptInputSelectItem>
+                    {notes.map((note) => (
+                      <PromptInputSelectItem key={note.id} value={note.id}>
+                        {note.title}
+                      </PromptInputSelectItem>
+                    ))}
+                  </PromptInputSelectContent>
+                </PromptInputSelect>
+              )}
+              <span className="shrink-0 px-2 text-muted-foreground text-xs">
                 {input.length}/{MAX_QUESTION_CHARS}
               </span>
             </PromptInputTools>
