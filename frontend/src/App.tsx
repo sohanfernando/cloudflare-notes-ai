@@ -1,9 +1,10 @@
 import { MoonIcon, NotebookTextIcon, SunIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { ChatPanel } from '@/components/chat-panel'
+import { useEffect, useRef, useState } from 'react'
+import { ChatPanel, type ChatHandle } from '@/components/chat-panel'
 import { NotesPanel } from '@/components/notes-panel'
 import { Button } from '@/components/ui/button'
-import { useNotes } from '@/hooks/use-notes'
+import { useGaps } from '@/hooks/use-gaps'
+import { useNotes, type UploadProgress } from '@/hooks/use-notes'
 import { useTheme } from '@/hooks/use-theme'
 import { fetchCurrentUser } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,19 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null)
   const { theme, toggle } = useTheme()
   const notes = useNotes()
+  const gaps = useGaps()
+  const chat = useRef<ChatHandle>(null)
+
+  const addNote = async (input: { title: string; content: string }, onProgress?: UploadProgress) => {
+    await notes.add(input, onProgress)
+    // A new note may be suggested as the answer to an open gap.
+    gaps.refresh()
+  }
+
+  const askGap = (question: string, noteId: string | null) => {
+    setTab('chat')
+    chat.current?.ask(question, noteId)
+  }
 
   useEffect(() => {
     // The header simply omits the email if this fails; the panels report their own errors.
@@ -76,14 +90,17 @@ export default function App() {
             error={notes.error}
             loading={notes.loading}
             notes={notes.notes}
-            onAdd={notes.add}
+            onAdd={addNote}
             onDelete={notes.remove}
+            gaps={gaps.gaps}
+            onAskGap={askGap}
+            onDismissGap={gaps.dismiss}
           />
         </aside>
         <section
           className={cn('min-h-0 min-w-0 flex-1 flex-col md:flex', tab === 'chat' ? 'flex' : 'hidden')}
         >
-          <ChatPanel notes={notes.notes} />
+          <ChatPanel notes={notes.notes} onAnswered={gaps.refresh} ref={chat} />
         </section>
       </main>
     </div>

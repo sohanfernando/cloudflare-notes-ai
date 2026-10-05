@@ -1,4 +1,4 @@
-import type { NoteSummary } from '@shared/types'
+import type { Gap, NoteSummary } from '@shared/types'
 
 const FALLBACK_ERROR = 'Something went wrong. Please try again.'
 
@@ -63,4 +63,13 @@ export async function appendToNote(id: string, content: string): Promise<NoteSum
 
 export async function deleteNote(id: string): Promise<void> {
   await request<void>(`/notes/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function fetchGaps(): Promise<Gap[]> {
+  const { gaps } = await request<{ gaps: Gap[] }>('/gaps')
+  return gaps
+}
+
+export async function dismissGap(id: string): Promise<void> {
+  await request<void>(`/gaps/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

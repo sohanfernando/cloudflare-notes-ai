@@ -5,6 +5,7 @@ import { createVectorStore } from "../lib/vector-store";
 import type { Env } from "../types";
 import type { NoteInput } from "../validation/notes";
 import { auditStatement, type AuditAction } from "./audit";
+import { suggestNoteForGaps } from "./gaps";
 
 /** Put between the parts of a note that was uploaded in several requests. */
 const PART_SEPARATOR = "\n\n";
@@ -73,6 +74,8 @@ async function ingest(
     );
     throw error;
   }
+
+  await suggestNoteForGaps(env, userId, noteId, embeddings);
   return chunks.length;
 }
 

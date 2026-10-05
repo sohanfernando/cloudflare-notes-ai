@@ -11,6 +11,7 @@ It runs entirely on Cloudflare's free tier (Workers, D1, Vectorize, Workers AI, 
 - Ask questions and get streamed answers grounded in your notes, with the source note and chunk shown under each answer.
 - Ask across all your notes, or pick one note in the chat box to ask about only that one.
 - Follow-up questions keep the context of the conversation.
+- Gaps: questions your notes couldn't answer are listed, so you can see what is worth adding. A gap closes when you ask it again and get an answer, and is flagged when a note you add looks likely to answer it.
 - Every user sees only their own notes. Login is handled by Cloudflare Access.
 - Works on phones, with light and dark themes.
 
@@ -21,7 +22,7 @@ flowchart TD
     B["Browser<br/>React app (useChat)"]
     A["Cloudflare Access<br/>login, signed JWT"]
     W["Cloudflare Worker<br/>static assets + /api (Hono)"]
-    D[("D1<br/>notes, chunks, audit_log")]
+    D[("D1<br/>notes, chunks, gaps, audit_log")]
     V[("Vectorize<br/>embeddings + user_id")]
     AI["Workers AI<br/>embeddings + LLM"]
 
@@ -54,6 +55,12 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 4. The model is told to answer only from those chunks, and to say "I don't know" otherwise.
 5. The answer streams to the browser. When it finishes, the chunks that scored well enough are sent as its sources.
 
+### Gaps
+
+1. When the model replies "I don't know", the question is saved with its embedding and the score of the best chunk it was offered. Repeats of a question raise its count; messages under three words are ignored.
+2. When a later answer to the same question is not "I don't know", the gap is deleted.
+3. When note text is added, its chunks are compared with the open gaps. A gap is flagged with that note if a chunk matches its question clearly better than the best match it had before. This is a hint only; step 2 is what closes a gap.
+
 ## Tech stack
 
 | Layer | Technology |
@@ -73,21 +80,21 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 ```
 ├── worker/                  Backend (Cloudflare Worker)
 │   ├── db/
-│   │   ├── schema.sql       D1 tables: notes, chunks, audit_log
+│   │   ├── schema.sql       D1 tables: notes, chunks, gaps, audit_log
 │   │   └── schema.local.sql Local-only table that stands in for Vectorize
 │   ├── src/
 │   │   ├── index.ts         App wiring: CORS, body limit, auth, routes
 │   │   ├── routes/          HTTP handlers
 │   │   ├── middleware/      Authentication, rate limiting, error handling
 │   │   ├── validation/      Request parsing and input limits
-│   │   ├── services/        Notes, chat (retrieval and answer), audit log
+│   │   ├── services/        Notes, chat (retrieval and answer), gaps, audit log
 │   │   └── lib/             JWT verification, AI calls, chunking, vector store
 │   ├── wrangler.toml        Worker configuration and bindings
 │   └── .dev.vars.example    Local settings template
 ├── frontend/                React app
 │   └── src/
-│       ├── components/      notes-panel, chat-panel, ui/, ai-elements/
-│       ├── hooks/           use-notes, use-theme
+│       ├── components/      notes-panel, chat-panel, gaps-list, ui/, ai-elements/
+│       ├── hooks/           use-notes, use-gaps, use-theme
 │       └── lib/             API client, reading uploaded files, formatting
 ├── shared/                  API types, limits and note splitting used by both sides
 └── package.json             Shortcut scripts for the two packages
@@ -208,6 +215,8 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 | `POST` | `/api/notes` | Add a note: `{ "title"?: string, "content": string }` |
 | `POST` | `/api/notes/:id/parts` | Append more text to a note: `{ "content": string }` |
 | `DELETE` | `/api/notes/:id` | Delete a note with its chunks and vectors |
+| `GET` | `/api/gaps` | List the questions the user's notes could not answer |
+| `DELETE` | `/api/gaps/:id` | Dismiss a gap |
 | `POST` | `/api/chat` | Ask a question; body and response follow the AI SDK `useChat` protocol. An optional `noteId` in the body limits the search to that note |
 
 ## Security
@@ -225,6 +234,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 
 - **New notes are not searchable instantly in production.** Vectorize indexes in the background, usually within a few seconds. The same delay applies to deletions.
 - **Notes cannot be viewed or edited** after they are added; the list shows only title, date and size.
+- **Gaps are recorded by wording.** A follow-up such as "and how often?" is saved as its own gap even though it only made sense in its conversation, and two differently worded versions of one question are two gaps. Each can be dismissed.
 - **Follow-up questions retrieve on the latest message only**, so a short follow-up such as "and when is it?" finds weaker matches than a full question.
 - **The source cutoff is tuned on a small sample.** A correct answer whose best match scores below `CITATION_MIN_SCORE` is shown without sources.
 - **Token counts are estimated** (about 4 characters per token), so chunks are somewhat shorter than 500 real tokens.

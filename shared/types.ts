@@ -17,6 +17,18 @@ export interface Citation {
   snippet: string;
 }
 
+/** A question the user asked that their notes could not answer. */
+export interface Gap {
+  id: string;
+  question: string;
+  askCount: number;
+  lastAskedAt: number;
+  /** The note the question was limited to when last asked, if any. */
+  noteId: string | null;
+  /** A note added since then that looks likely to answer it. */
+  suggestedNoteId: string | null;
+}
+
 /** Custom data parts of a chat message: citations travel to the browser as `data-citations`. */
 export type ChatDataParts = {
   citations: Citation[];

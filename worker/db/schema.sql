@@ -26,3 +26,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   timestamp INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
+
+-- Questions the user's notes could not answer: one row per distinct question.
+CREATE TABLE IF NOT EXISTS gaps (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  question_key TEXT NOT NULL,          -- normalised question, so repeats are counted, not duplicated
+  embedding BLOB NOT NULL,             -- the question's embedding as float32 bytes
+  best_score REAL NOT NULL,            -- best match the notes offered when it went unanswered
+  note_id TEXT,                        -- note the question was limited to, if any
+  suggested_note_id TEXT,              -- note added later that may answer it
+  ask_count INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  last_asked_at INTEGER NOT NULL,
+  UNIQUE (user_id, question_key)
+);
+CREATE INDEX IF NOT EXISTS idx_gaps_user ON gaps(user_id);

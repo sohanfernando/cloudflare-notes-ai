@@ -7,7 +7,7 @@ import {
 } from '@shared/types'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import { BookOpenIcon, ChevronDownIcon, MessageSquareIcon, RotateCcwIcon, SquarePenIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useImperativeHandle, useState, type Ref } from 'react'
 import {
   Conversation,
   ConversationContent,
@@ -48,11 +48,24 @@ function citationsOf(message: ChatMessage): Citation[] {
   return message.parts.flatMap((part) => (part.type === 'data-citations' ? part.data : []))
 }
 
-export function ChatPanel({ notes }: { notes: NoteSummary[] }) {
+/** What the rest of the app can ask the chat to do. */
+export interface ChatHandle {
+  /** Sends a question as if the user had typed it, limited to `noteId` when one is given. */
+  ask: (question: string, noteId: string | null) => void
+}
+
+interface ChatPanelProps {
+  notes: NoteSummary[]
+  /** Called each time an answer finishes. */
+  onAnswered: () => void
+  ref: Ref<ChatHandle>
+}
+
+export function ChatPanel({ notes, onAnswered, ref }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [selectedNoteId, setSelectedNoteId] = useState(ALL_NOTES)
   const { messages, sendMessage, setMessages, regenerate, clearError, stop, status, error } =
-    useChat<ChatMessage>({ transport })
+    useChat<ChatMessage>({ transport, onFinish: onAnswered })
 
   // Looked up on every render, so the picker falls back to "All notes" if the note is deleted.
   const scope = notes.find((note) => note.id === selectedNoteId)
@@ -70,6 +83,17 @@ export function ChatPanel({ notes }: { notes: NoteSummary[] }) {
     setInput('')
     void sendMessage({ text: question }, requestOptions)
   }
+
+  useImperativeHandle(ref, () => ({
+    ask: (question, noteId) => {
+      if (busy) return
+      const note = notes.find((candidate) => candidate.id === noteId)
+      // Move the picker too, so it shows what this question is being asked about.
+      setSelectedNoteId(note?.id ?? ALL_NOTES)
+      clearError()
+      void sendMessage({ text: question }, note ? { body: { noteId: note.id } } : undefined)
+    },
+  }))
 
   const startNewChat = () => {
     void stop()

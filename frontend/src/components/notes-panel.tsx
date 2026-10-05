@@ -1,4 +1,4 @@
-import { MAX_NOTE_BYTES, MAX_TITLE_CHARS, type NoteSummary } from '@shared/types'
+import { MAX_NOTE_BYTES, MAX_TITLE_CHARS, type Gap, type NoteSummary } from '@shared/types'
 import { FileTextIcon, PaperclipIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react'
 import {
@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { GapsList } from '@/components/gaps-list'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -30,9 +31,21 @@ interface NotesPanelProps {
   error: string | null
   onAdd: (input: { title: string; content: string }, onProgress?: UploadProgress) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  gaps: Gap[]
+  onAskGap: (question: string, noteId: string | null) => void
+  onDismissGap: (id: string) => void
 }
 
-export function NotesPanel({ notes, loading, error, onAdd, onDelete }: NotesPanelProps) {
+export function NotesPanel({
+  notes,
+  loading,
+  error,
+  onAdd,
+  onDelete,
+  gaps,
+  onAskGap,
+  onDismissGap,
+}: NotesPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AddNoteForm onAdd={onAdd} />
@@ -57,6 +70,7 @@ export function NotesPanel({ notes, loading, error, onAdd, onDelete }: NotesPane
             ))}
           </ul>
         )}
+        <GapsList gaps={gaps} notes={notes} onAsk={onAskGap} onDismiss={onDismissGap} />
       </div>
     </div>
   )

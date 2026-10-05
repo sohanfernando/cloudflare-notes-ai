@@ -9,6 +9,7 @@ import { chatModel, embedTexts } from "../lib/ai";
 import { createVectorStore } from "../lib/vector-store";
 import type { ChatMessage, Env } from "../types";
 import type { ChatRequest } from "../validation/chat";
+import { trackGap } from "./gaps";
 
 const TOP_K = 5;
 const SNIPPET_CHARS = 200;
@@ -30,15 +31,31 @@ interface RetrievedChunk extends Citation {
   content: string;
 }
 
-/** Finds the user's chunks most similar to the question, best match first. */
+interface Retrieval {
+  /** The question's embedding. */
+  embedding: number[];
+  /** The user's chunks most similar to the question, best match first. */
+  chunks: RetrievedChunk[];
+}
+
 async function retrieve(
   env: Env,
   userId: string,
   question: string,
   noteId?: string,
-): Promise<RetrievedChunk[]> {
+): Promise<Retrieval> {
   const [embedding] = await embedTexts(env, [question]);
-  const matches = await createVectorStore(env).query(userId, embedding!, TOP_K, noteId);
+  if (!embedding) throw new Error("The question was not embedded");
+  return { embedding, chunks: await findChunks(env, userId, embedding, noteId) };
+}
+
+async function findChunks(
+  env: Env,
+  userId: string,
+  embedding: number[],
+  noteId?: string,
+): Promise<RetrievedChunk[]> {
+  const matches = await createVectorStore(env).query(userId, embedding, TOP_K, noteId);
   if (matches.length === 0) return [];
 
   // The vector store only returns IDs; the text is read from D1, again scoped to the user.
@@ -90,9 +107,18 @@ Context:
 ${context}`;
 }
 
-/** Retrieves context for the question and streams a grounded answer with its citations. */
-export async function answerQuestion(env: Env, userId: string, request: ChatRequest): Promise<Response> {
-  const chunks = await retrieve(env, userId, request.question, request.noteId);
+/**
+ * Retrieves context for the question and streams a grounded answer with its
+ * citations. `runInBackground` receives work that may still be running when
+ * the stream ends, so the caller can keep the Worker alive for it.
+ */
+export async function answerQuestion(
+  env: Env,
+  userId: string,
+  request: ChatRequest,
+  runInBackground: (work: Promise<unknown>) => void,
+): Promise<Response> {
+  const { embedding, chunks } = await retrieve(env, userId, request.question, request.noteId);
 
   const stream = createUIMessageStream<ChatMessage>({
     execute: ({ writer }) => {
@@ -114,9 +140,20 @@ export async function answerQuestion(env: Env, userId: string, request: ChatRequ
         instructions: buildInstructions(chunks),
         messages: [...request.history, { role: "user", content: request.question }],
         // Sources are chosen once the answer is complete, since they depend on what it says.
-        onEnd: ({ text }) => {
+        onEnd: async ({ text }) => {
           const citations = selectCitations(env, chunks, text);
           if (citations.length > 0) writer.write({ type: "data-citations", data: citations });
+
+          const tracking = trackGap(env, userId, {
+            question: request.question,
+            embedding,
+            bestScore: chunks[0]?.score ?? 0,
+            noteId: request.noteId,
+            answered: !UNKNOWN_ANSWER.test(text),
+          });
+          runInBackground(tracking);
+          // Awaited so the browser's reload of the gaps list, on finish, sees the change.
+          await tracking;
         },
       });
       writer.merge(toUIMessageStream({ stream: result.stream, sendStart: false }));

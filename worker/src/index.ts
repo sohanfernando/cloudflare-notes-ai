@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { requireUser } from "./middleware/auth";
 import { handleError, handleNotFound } from "./middleware/error";
 import { chatRoutes } from "./routes/chat";
+import { gapsRoutes } from "./routes/gaps";
 import { notesRoutes } from "./routes/notes";
 import type { AppEnv } from "./types";
 
@@ -30,6 +31,7 @@ app.use(requireUser);
 app.get("/me", (c) => c.json({ userId: c.var.userId }));
 app.route("/notes", notesRoutes);
 app.route("/chat", chatRoutes);
+app.route("/gaps", gapsRoutes);
 
 app.notFound(handleNotFound);
 app.onError(handleError);
