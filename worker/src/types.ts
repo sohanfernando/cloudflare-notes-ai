@@ -30,6 +30,14 @@ export interface Env {
 
   ALLOWED_ORIGIN: string;
   VECTOR_STORE: "local" | "vectorize";
+
+  // Per-user limits; each falls back to a default in services/quota.ts when unset.
+  /** Most notes one user can have. */
+  MAX_NOTES_PER_USER?: string;
+  /** Most chunks one user's notes can hold in total; about 1.5 KB of text each. */
+  MAX_CHUNKS_PER_USER?: string;
+  /** Most questions one user can ask per UTC day. */
+  MAX_QUESTIONS_PER_DAY?: string;
 }
 
 export type AppEnv = { Bindings: Env; Variables: { userId: string } };

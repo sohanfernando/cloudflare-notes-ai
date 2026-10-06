@@ -13,7 +13,8 @@ It runs entirely on Cloudflare's free tier (Workers, D1, Vectorize, Workers AI, 
 - Follow-up questions keep the context of the conversation.
 - Verified quotes: each answer shows passages from your notes that back it up, and each passage is marked as verified only after the server finds it word for word in the note.
 - Gaps: questions your notes couldn't answer are listed, so you can see what is worth adding. A gap closes when you ask it again and get an answer, and is flagged when a note you add looks likely to answer it.
-- Every user sees only their own notes. Login is handled by Cloudflare Access.
+- Every user sees only their own notes. Login is handled by Cloudflare Access: anyone can sign in with a code sent to their email, or access can be restricted to chosen people.
+- Per-user limits (20 notes, 30 questions a day by default) keep one person from using up the shared free allowances.
 - Works on phones, with light and dark themes.
 
 ## Architecture
@@ -23,7 +24,7 @@ flowchart TD
     B["Browser<br/>React app (useChat)"]
     A["Cloudflare Access<br/>login, signed JWT"]
     W["Cloudflare Worker<br/>static assets + /api (Hono)"]
-    D[("D1<br/>notes, chunks, gaps, audit_log")]
+    D[("D1<br/>notes, chunks, gaps, usage, audit_log")]
     V[("Vectorize<br/>embeddings + user_id")]
     AI["Workers AI<br/>embeddings + LLM"]
 
@@ -95,16 +96,16 @@ It does not depend on the reply ending cleanly either. Sources and quotes are wo
 ```
 ├── worker/                  Backend (Cloudflare Worker)
 │   ├── db/
-│   │   ├── schema.sql       D1 tables: notes, chunks, gaps, audit_log
+│   │   ├── schema.sql       D1 tables: notes, chunks, gaps, usage, audit_log
 │   │   └── schema.local.sql Local-only table that stands in for Vectorize
 │   ├── src/
 │   │   ├── index.ts         App wiring: CORS, body limit, auth, routes
 │   │   ├── routes/          HTTP handlers
 │   │   ├── middleware/      Authentication, rate limiting, error handling
 │   │   ├── validation/      Request parsing and input limits
-│   │   ├── services/        Notes, chat (retrieval and answer), gaps, audit log
+│   │   ├── services/        Notes, chat (retrieval and answer), gaps, quotas, audit log
 │   │   └── lib/             JWT verification, AI calls, chunking, quotes, reply stream, vector store
-│   ├── test/                Unit tests, mirroring src/lib and shared/
+│   ├── test/                Unit tests, mirroring src/ and shared/
 │   ├── wrangler.toml        Worker configuration and bindings
 │   └── .dev.vars.example    Local settings template
 ├── frontend/                React app
@@ -179,6 +180,9 @@ Locally, all values come from `worker/.dev.vars`. In production they come from t
 | `CITATION_MIN_SCORE` | Lowest similarity score shown as a source | `0.56` | `wrangler.toml` |
 | `AUTH_ENABLED` | Login is enforced unless this is exactly `false` | `true` | `wrangler.toml` |
 | `VECTOR_STORE` | `vectorize` or `local` | `vectorize` | `wrangler.toml` |
+| `MAX_NOTES_PER_USER` | Most notes one user can have | `20` | `wrangler.toml` |
+| `MAX_CHUNKS_PER_USER` | Most chunks one user's notes can hold in total (about 1.5 KB of text each) | `1000` | `wrangler.toml` |
+| `MAX_QUESTIONS_PER_DAY` | Most questions one user can ask per UTC day | `30` | `wrangler.toml` |
 | `LLM_BASE_URL` | OpenAI-compatible API base URL | `https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1` | dashboard |
 | `ACCESS_TEAM_DOMAIN` | Your Access team domain | `https://<team>.cloudflareaccess.com` | dashboard |
 | `ACCESS_AUD` | Audience tag of the Access application | from the Worker's Access tab | dashboard |
@@ -214,7 +218,7 @@ Everything here fits in the free plans. To deploy your own copy:
    | Deploy command | `npx wrangler deploy` |
    | Protect with Cloudflare Access | on, scope "All traffic" |
 
-4. **Access.** Choose who may log in. The "Cloudflare account" policy allows only members of your account; add specific email addresses in Zero Trust to invite others.
+4. **Access.** Choose who may log in. The policy created by the toggle, "Cloudflare account members", allows only members of your account. To change it, activate the free Zero Trust plan (up to 50 users), create a policy under Access controls → Policies, and attach it to the application: Include "Everyone" lets anyone sign in with an emailed code, and Include "Emails" restricts it to the addresses you list.
 5. **Workers AI token.** Under API Tokens, create a token from the "Workers AI" template.
 6. **Variables.** In the Worker's Settings → Variables and Secrets, add the five dashboard values from the table above, with `LLM_API_KEY` as a Secret.
 
@@ -242,6 +246,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **Secrets.** The Workers AI token is a Worker Secret. The browser never calls the AI API; all model calls go through the Worker. `.dev.vars` is gitignored.
 - **Input limits.** Notes up to 1 MB of text in total and 100 KB per request, titles up to 200 characters, questions up to 500 characters, request bodies up to 256 KB.
 - **Rate limiting.** Per user, 20 questions per minute and 60 note-upload requests per minute. These are the two actions that use Workers AI; a 1 MB note takes about 22 upload requests.
+- **Quotas.** Per user, 20 notes, 1,000 chunks of note text (about 1.5 MB) and 30 questions per UTC day, all configurable. The question count is kept in D1 and incremented and checked in one statement, so simultaneous requests cannot slip past it.
 - **Prompt control.** Only the server sets the system prompt; a client message with the `system` role is rejected.
 - **Injection.** All SQL uses prepared statements. Model output is rendered as markdown with raw HTML disabled.
 - **Audit log.** Every note creation and deletion is recorded in `audit_log` with the user and time.
@@ -257,9 +262,10 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **Quotes can include a section heading.** Notes are stored as running text, so a heading that sat on its own line can appear at the start of the sentence after it.
 - **The larger chat model uses the free Workers AI allowance about twice as fast** as the 8B model it replaced.
 - **Token counts are estimated** (about 4 characters per token), so chunks are somewhat shorter than 500 real tokens.
-- **Free-tier quota.** When the daily Workers AI allowance runs out, questions and new notes fail with an error until it resets.
+- **Free-tier quota is shared by all users.** The daily Workers AI allowance covers roughly 115 questions in total, so the per-user limit of 30 slows one person down but four busy users can still exhaust it. Questions and new notes then fail with an error until it resets.
+- **The free Zero Trust plan allows 50 users.** Each distinct person who signs in takes a seat; after 50, new people are blocked until seats are freed or the plan is upgraded.
 - **Tests cover the logic, not the wiring.** The unit tests in `worker/test` cover text cleaning and chunking, splitting uploads into parts, quote checking, the reply stream and the retry loop. Routes, database queries and the frontend are tested by hand.
 - **Scanned documents are not supported.** A PDF that contains only images of pages has no text to extract. Old Word files (.doc) are not supported either.
-- **Free-tier storage is small.** Vectorize's free plan holds roughly 6,500 chunks across all users, which is about 10 MB of note text in total.
+- **Free-tier storage is small.** Vectorize's free plan holds roughly 6,500 chunks across all users, about 10 MB of note text. A single user is capped at 1,000 chunks, but there is no check on the total, so seven users at their cap would fill the index.
 - **A failed upload is rolled back by the browser.** If a large upload fails partway and the clean-up request fails too, a partial note remains and has to be deleted by hand.
 - **Not yet verified in production:** the rate limits (tested locally only), and preview deployments for pull requests.

@@ -22,6 +22,10 @@ EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
 CITATION_MIN_SCORE = "0.56"
 AUTH_ENABLED = "true"
 VECTOR_STORE = "vectorize"
+# Per-user limits. Everyone shares one free Workers AI allowance and one vector index.
+MAX_NOTES_PER_USER = "20"
+MAX_CHUNKS_PER_USER = "1000"
+MAX_QUESTIONS_PER_DAY = "30"
 
 [[d1_databases]]
 binding = "DB"

@@ -15,5 +15,10 @@ AUTH_ENABLED=false
 # Vectors are kept in the local D1 database instead of Vectorize
 VECTOR_STORE=local
 
+# Per-user limits are lifted locally so development and testing are not interrupted
+MAX_NOTES_PER_USER=1000
+MAX_CHUNKS_PER_USER=100000
+MAX_QUESTIONS_PER_DAY=100000
+
 # Origin of the Vite dev server
 ALLOWED_ORIGIN=http://localhost:5173

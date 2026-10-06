@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { limitIngestion } from "../middleware/rate-limit";
 import { appendToNote, createNote, deleteNote, listNotes } from "../services/notes";
+import { checkNoteQuota } from "../services/quota";
 import type { AppEnv } from "../types";
 import { parseNoteInput, parseNotePart } from "../validation/notes";
 
@@ -12,6 +13,7 @@ notesRoutes.get("/", async (c) => c.json({ notes: await listNotes(c.env, c.var.u
 notesRoutes.post("/", limitIngestion, async (c) => {
   const input = parseNoteInput(await c.req.json().catch(() => null));
   if (!input.ok) return c.json({ error: input.error }, 400);
+  await checkNoteQuota(c.env, c.var.userId, true);
   return c.json({ note: await createNote(c.env, c.var.userId, input.value) }, 201);
 });
 
@@ -19,6 +21,7 @@ notesRoutes.post("/", limitIngestion, async (c) => {
 notesRoutes.post("/:id/parts", limitIngestion, async (c) => {
   const part = parseNotePart(await c.req.json().catch(() => null));
   if (!part.ok) return c.json({ error: part.error }, 400);
+  await checkNoteQuota(c.env, c.var.userId, false);
   const note = await appendToNote(c.env, c.var.userId, c.req.param("id"), part.value);
   if (!note) return c.json({ error: "Note not found." }, 404);
   return c.json({ note });

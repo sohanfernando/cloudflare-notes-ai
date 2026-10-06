@@ -43,3 +43,11 @@ CREATE TABLE IF NOT EXISTS gaps (
   UNIQUE (user_id, question_key)
 );
 CREATE INDEX IF NOT EXISTS idx_gaps_user ON gaps(user_id);
+
+-- Questions asked per user per UTC day, for the daily limit.
+CREATE TABLE IF NOT EXISTS usage (
+  user_id TEXT NOT NULL,
+  day TEXT NOT NULL,                   -- YYYY-MM-DD in UTC
+  questions INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day)
+);

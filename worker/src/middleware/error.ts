@@ -1,6 +1,7 @@
 import type { ErrorHandler, NotFoundHandler } from "hono";
 import { AiServiceError } from "../lib/ai";
 import { NoteTooLargeError } from "../services/notes";
+import { QuotaExceededError } from "../services/quota";
 import type { AppEnv } from "../types";
 
 export const handleNotFound: NotFoundHandler<AppEnv> = (c) => c.json({ error: "Not found." }, 404);
@@ -8,6 +9,7 @@ export const handleNotFound: NotFoundHandler<AppEnv> = (c) => c.json({ error: "N
 /** Logs the error and replies with a message that is safe to show to the user. */
 export const handleError: ErrorHandler<AppEnv> = (error, c) => {
   if (error instanceof NoteTooLargeError) return c.json({ error: error.message }, 413);
+  if (error instanceof QuotaExceededError) return c.json({ error: error.message }, 429);
 
   console.error(error);
   if (error instanceof AiServiceError) {
