@@ -230,7 +230,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/me` | The current user's ID (their email) |
+| `GET` | `/api/me` | The current user's ID (their email) and whether there is a session to sign out of |
 | `GET` | `/api/notes` | List the user's notes |
 | `POST` | `/api/notes` | Add a note: `{ "title"?: string, "content": string }` |
 | `POST` | `/api/notes/:id/parts` | Append more text to a note: `{ "content": string }` |

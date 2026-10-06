@@ -1,4 +1,4 @@
-import type { Gap, NoteSummary } from '@shared/types'
+import type { CurrentUser, Gap, NoteSummary } from '@shared/types'
 
 const FALLBACK_ERROR = 'Something went wrong. Please try again.'
 
@@ -32,9 +32,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (response.status === 204 ? undefined : await response.json()) as T
 }
 
-export async function fetchCurrentUser(): Promise<string> {
-  const { userId } = await request<{ userId: string }>('/me')
-  return userId
+export async function fetchCurrentUser(): Promise<CurrentUser> {
+  return request<CurrentUser>('/me')
 }
 
 export async function fetchNotes(): Promise<NoteSummary[]> {

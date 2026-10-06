@@ -1,4 +1,5 @@
-import { MoonIcon, NotebookTextIcon, SunIcon } from 'lucide-react'
+import type { CurrentUser } from '@shared/types'
+import { LogOutIcon, MoonIcon, NotebookTextIcon, SunIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ChatPanel, type ChatHandle } from '@/components/chat-panel'
 import { NotesPanel } from '@/components/notes-panel'
@@ -11,6 +12,9 @@ import { cn } from '@/lib/utils'
 
 type Tab = 'chat' | 'notes'
 
+/** Cloudflare Access serves this path on every protected site; visiting it ends the session. */
+const SIGN_OUT_URL = '/cdn-cgi/access/logout'
+
 const TABS: { id: Tab; label: string }[] = [
   { id: 'chat', label: 'Chat' },
   { id: 'notes', label: 'Notes' },
@@ -18,7 +22,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('chat')
-  const [userId, setUserId] = useState<string | null>(null)
+  const [user, setUser] = useState<CurrentUser | null>(null)
   const { theme, toggle } = useTheme()
   const notes = useNotes()
   const gaps = useGaps()
@@ -37,7 +41,7 @@ export default function App() {
 
   useEffect(() => {
     // The header simply omits the email if this fails; the panels report their own errors.
-    fetchCurrentUser().then(setUserId, () => undefined)
+    fetchCurrentUser().then(setUser, () => undefined)
   }, [])
 
   return (
@@ -47,7 +51,7 @@ export default function App() {
           <NotebookTextIcon className="size-5" /> Notes AI
         </div>
         <div className="flex min-w-0 items-center gap-2">
-          {userId && <span className="truncate text-muted-foreground text-sm">{userId}</span>}
+          {user && <span className="truncate text-muted-foreground text-sm">{user.userId}</span>}
           <Button
             aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             onClick={toggle}
@@ -56,6 +60,14 @@ export default function App() {
           >
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </Button>
+          {user?.canSignOut && (
+            <Button asChild size="sm" variant="outline">
+              <a href={SIGN_OUT_URL}>
+                <LogOutIcon /> <span className="hidden sm:inline">Sign out</span>
+                <span className="sr-only sm:hidden">Sign out</span>
+              </a>
+            </Button>
+          )}
         </div>
       </header>
 

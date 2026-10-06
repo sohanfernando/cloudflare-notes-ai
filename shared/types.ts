@@ -8,6 +8,13 @@ export interface NoteSummary {
   chunkCount: number;
 }
 
+/** Who is signed in, as returned by /api/me. */
+export interface CurrentUser {
+  userId: string;
+  /** False in local development, where login is bypassed and there is no session to end. */
+  canSignOut: boolean;
+}
+
 /** One retrieved chunk that an answer was grounded in. */
 export interface Citation {
   chunkId: string;

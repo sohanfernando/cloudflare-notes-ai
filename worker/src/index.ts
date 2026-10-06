@@ -6,6 +6,7 @@ import { handleError, handleNotFound } from "./middleware/error";
 import { chatRoutes } from "./routes/chat";
 import { gapsRoutes } from "./routes/gaps";
 import { notesRoutes } from "./routes/notes";
+import type { CurrentUser } from "../../shared/types";
 import type { AppEnv } from "./types";
 
 /** Cap on any request body; leaves room for JSON escaping around a 100 KB note. */
@@ -28,7 +29,10 @@ app.use(
 // Every route below runs as a verified user.
 app.use(requireUser);
 
-app.get("/me", (c) => c.json({ userId: c.var.userId }));
+app.get("/me", (c) => {
+  const user: CurrentUser = { userId: c.var.userId, canSignOut: c.env.AUTH_ENABLED !== "false" };
+  return c.json(user);
+});
 app.route("/notes", notesRoutes);
 app.route("/chat", chatRoutes);
 app.route("/gaps", gapsRoutes);
