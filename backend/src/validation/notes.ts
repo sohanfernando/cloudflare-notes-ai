@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_PART_BYTES, MAX_TITLE_CHARS } from "../../../shared/types";
+import { MAX_PART_BYTES, MAX_TITLE_CHARS } from "../shared/types";
 import { cleanText } from "../lib/text";
 import type { Parsed } from "../types";
 

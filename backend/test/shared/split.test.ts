@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { splitIntoParts } from "../../../shared/split.ts";
+import { splitIntoParts } from "../../src/shared/split.ts";
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 

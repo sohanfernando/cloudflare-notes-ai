@@ -5,7 +5,7 @@
  * shown as verified only if this code finds it in the text of a retrieved chunk.
  */
 
-import type { Quote } from "../../../shared/types";
+import type { Quote } from "../shared/types";
 
 /** A chunk that was given to the model as context. */
 export interface QuoteSource {

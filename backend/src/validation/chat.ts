@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 import { z } from "zod";
-import { MAX_QUESTION_CHARS } from "../../../shared/types";
+import { MAX_QUESTION_CHARS } from "../shared/types";
 import type { Parsed } from "../types";
 
 /** Earlier turns sent to the model, so follow-up questions keep their context. */

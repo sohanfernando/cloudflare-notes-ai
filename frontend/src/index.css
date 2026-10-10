@@ -127,6 +127,12 @@
   html {
     @apply font-sans;
     }
+  /* Links within the landing page glide to their section. */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
 }
 /* Markdown rendered inside assistant messages. */
 @layer components {

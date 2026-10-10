@@ -44,7 +44,7 @@ In local development, Ollama stands in for Workers AI, a table in the local D1 d
 1. For an uploaded file, the browser extracts the text; the file itself is never sent to the server.
 2. Text larger than about 48 KB is sent as a series of parts. The first request creates the note and the rest append to it, so each request stays small.
 3. Each part is cleaned (unicode normalised, whitespace collapsed) and checked against the size limits.
-4. It is split into chunks of about 500 tokens, each overlapping the previous one by about 50.
+4. It is split into chunks of about 250 tokens, each overlapping the previous one by about 40.
 5. Each chunk is embedded into a 768-dimension vector.
 6. Vectors are stored in the vector index, tagged with the user's ID.
 7. The note text, its chunks and an audit row are written to D1 in one transaction.
@@ -94,7 +94,7 @@ It does not depend on the reply ending cleanly either. Sources and quotes are wo
 ## Project structure
 
 ```
-├── worker/                  Backend (Cloudflare Worker)
+├── backend/                 Backend (Cloudflare Worker)
 │   ├── db/
 │   │   ├── schema.sql       D1 tables: notes, chunks, gaps, usage, audit_log
 │   │   └── schema.local.sql Local-only table that stands in for Vectorize
@@ -104,17 +104,16 @@ It does not depend on the reply ending cleanly either. Sources and quotes are wo
 │   │   ├── middleware/      Authentication, rate limiting, error handling
 │   │   ├── validation/      Request parsing and input limits
 │   │   ├── services/        Notes, chat (retrieval and answer), gaps, quotas, audit log
-│   │   └── lib/             JWT verification, AI calls, chunking, quotes, reply stream, vector store
-│   ├── test/                Unit tests, mirroring src/ and shared/
+│   │   ├── lib/             JWT verification, AI calls, chunking, quotes, reply stream, vector store
+│   │   └── shared/          API types, limits and note splitting, also imported by the frontend
+│   ├── test/                Unit tests, mirroring src/
 │   ├── wrangler.toml        Worker configuration and bindings
 │   └── .dev.vars.example    Local settings template
-├── frontend/                React app
-│   └── src/
-│       ├── components/      notes-panel, chat-panel, gaps-list, ui/, ai-elements/
-│       ├── hooks/           use-notes, use-gaps, use-theme
-│       └── lib/             API client, reading uploaded files, formatting
-├── shared/                  API types, limits and note splitting used by both sides
-└── package.json             Shortcut scripts for the two packages
+└── frontend/                React app
+    └── src/
+        ├── components/      notes-panel, chat-panel, gaps-list, ui/, ai-elements/
+        ├── hooks/           use-notes, use-gaps, use-theme
+        └── lib/             API client, reading uploaded files, formatting
 ```
 
 ## Run it locally
@@ -134,14 +133,18 @@ ollama pull nomic-embed-text
 ### Setup
 
 ```sh
-npm run setup                                    # install worker and frontend dependencies
-cp worker/.dev.vars.example worker/.dev.vars     # local settings
-npm run db:init                                  # create the local database tables
-npm run build                                    # build the frontend
-npm run dev                                      # start the app
+cd frontend
+npm install                          # frontend dependencies
+npm run build                        # build the frontend into frontend/dist
+
+cd ../backend
+npm install                          # worker dependencies
+cp .dev.vars.example .dev.vars       # local settings
+npm run db:init                      # create the local database tables
+npm run dev                          # start the app
 ```
 
-Open <http://127.0.0.1:8787>. You are signed in as `dev@localhost`; there is no login locally.
+Open <http://127.0.0.1:8787> for the landing page, or <http://127.0.0.1:8787/app> for the app itself. You are signed in as `dev@localhost`; there is no login locally.
 
 `wrangler dev` prints a warning that Vectorize bindings are not supported locally. That is expected: locally the vectors live in the D1 table from `schema.local.sql`.
 
@@ -149,39 +152,42 @@ Run `npm run db:init` again if `database_id` in `wrangler.toml` changes, because
 
 ### Working on the frontend
 
-Run the API and the Vite dev server in two terminals, then open <http://localhost:5173> for live reload:
+Run the API and the Vite dev server in two terminals, then open <http://localhost:5173> for live reload. The app is at `/app`; every other path shows the landing page.
 
 ```sh
-npm run dev        # API on port 8787
-npm run dev:web    # frontend on port 5173, proxying /api to the API
+cd backend && npm run dev      # API on port 8787
+cd frontend && npm run dev    # frontend on port 5173, proxying /api to the API
 ```
+
+The Worker needs the `frontend/dist` folder to exist before it starts, so build the frontend once first.
 
 ### Commands
 
-| Command | What it does |
-|---|---|
-| `npm run setup` | Install dependencies for `worker/` and `frontend/` |
-| `npm run dev` | Run the Worker locally, serving the built frontend |
-| `npm run dev:web` | Run the Vite dev server |
-| `npm run build` | Type-check and build the frontend |
-| `npm run db:init` | Create the local D1 tables |
-| `npm run typecheck` | Type-check the Worker |
-| `npm test` | Run the Worker's unit tests |
-| `npm run deploy` | Build and deploy from your machine (normally a push to `main` does this) |
+| Folder | Command | What it does |
+|---|---|---|
+| `backend/` | `npm run dev` | Run the Worker locally, serving the built frontend |
+| `backend/` | `npm run db:init` | Create the local D1 tables |
+| `backend/` | `npm run typecheck` | Type-check the Worker |
+| `backend/` | `npm test` | Run the Worker's unit tests |
+| `backend/` | `npm run deploy` | Deploy from your machine; build the frontend first (normally a push to `main` does both) |
+| `frontend/` | `npm run dev` | Run the Vite dev server |
+| `frontend/` | `npm run build` | Type-check and build the frontend |
+| `frontend/` | `npm run lint` | Lint the frontend |
 
 ## Configuration
 
-Locally, all values come from `worker/.dev.vars`. In production they come from three places.
+Locally, all values come from `backend/.dev.vars`. In production they come from three places.
 
 | Variable | Purpose | Production value | Set in |
 |---|---|---|---|
 | `LLM_MODEL` | Chat model | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `wrangler.toml` |
-| `EMBEDDING_MODEL` | Embedding model; must produce 768 dimensions | `@cf/baai/bge-base-en-v1.5` | `wrangler.toml` |
+| `EMBEDDING_MODEL` | Embedding model | `@cf/baai/bge-base-en-v1.5` | `wrangler.toml` |
+| `EMBEDDING_DIMENSIONS` | Vector size the embedding model produces; must match the Vectorize index | `768` when unset | `wrangler.toml` |
 | `CITATION_MIN_SCORE` | Lowest similarity score shown as a source | `0.56` | `wrangler.toml` |
 | `AUTH_ENABLED` | Login is enforced unless this is exactly `false` | `true` | `wrangler.toml` |
 | `VECTOR_STORE` | `vectorize` or `local` | `vectorize` | `wrangler.toml` |
 | `MAX_NOTES_PER_USER` | Most notes one user can have | `20` | `wrangler.toml` |
-| `MAX_CHUNKS_PER_USER` | Most chunks one user's notes can hold in total (about 1.5 KB of text each) | `1000` | `wrangler.toml` |
+| `MAX_CHUNKS_PER_USER` | Most chunks one user's notes can hold in total (about 0.9 KB of text each) | `1000` | `wrangler.toml` |
 | `MAX_QUESTIONS_PER_DAY` | Most questions one user can ask per UTC day | `30` | `wrangler.toml` |
 | `LLM_BASE_URL` | OpenAI-compatible API base URL | `https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1` | dashboard |
 | `ACCESS_TEAM_DOMAIN` | Your Access team domain | `https://<team>.cloudflareaccess.com` | dashboard |
@@ -197,11 +203,11 @@ Locally, all values come from `worker/.dev.vars`. In production they come from t
 
 Everything here fits in the free plans. To deploy your own copy:
 
-1. **D1.** In the dashboard, create a database named `notes-ai-db` and run `worker/db/schema.sql` in its console. Put the database ID in `worker/wrangler.toml`.
+1. **D1.** In the dashboard, create a database named `notes-ai-db` and run `backend/db/schema.sql` in its console. Put the database ID in `backend/wrangler.toml`.
 2. **Vectorize.** The dashboard cannot create indexes, so this step needs the CLI. Create both metadata indexes before adding any notes: a vector inserted before an index existed is invisible to that index's filter until its note is deleted and added again.
 
    ```sh
-   cd worker
+   cd backend
    npx wrangler login
    npx wrangler vectorize create notes-ai-index --dimensions=768 --metric=cosine
    npx wrangler vectorize create-metadata-index notes-ai-index --property-name=user_id --type=string
@@ -213,7 +219,7 @@ Everything here fits in the free plans. To deploy your own copy:
    | Setting | Value |
    |---|---|
    | Project name | `notes-ai` (must match `name` in `wrangler.toml`) |
-   | Root directory | `worker` |
+   | Root directory | `backend` |
    | Build command | `npm --prefix ../frontend ci && npm --prefix ../frontend run build` |
    | Deploy command | `npx wrangler deploy` |
    | Protect with Cloudflare Access | on, scope "All traffic" |
@@ -264,7 +270,7 @@ All routes are under `/api`, require a logged-in user, and return errors as `{ "
 - **Token counts are estimated** (about 4 characters per token), so chunks are somewhat shorter than 500 real tokens.
 - **Free-tier quota is shared by all users.** The daily Workers AI allowance covers roughly 115 questions in total, so the per-user limit of 30 slows one person down but four busy users can still exhaust it. Questions and new notes then fail with an error until it resets.
 - **The free Zero Trust plan allows 50 users.** Each distinct person who signs in takes a seat; after 50, new people are blocked until seats are freed or the plan is upgraded.
-- **Tests cover the logic, not the wiring.** The unit tests in `worker/test` cover text cleaning and chunking, splitting uploads into parts, quote checking, the reply stream and the retry loop. Routes, database queries and the frontend are tested by hand.
+- **Tests cover the logic, not the wiring.** The unit tests in `backend/test` cover text cleaning and chunking, splitting uploads into parts, quote checking, the reply stream and the retry loop. Routes, database queries and the frontend are tested by hand.
 - **Scanned documents are not supported.** A PDF that contains only images of pages has no text to extract. Old Word files (.doc) are not supported either.
 - **Free-tier storage is small.** Vectorize's free plan holds roughly 6,500 chunks across all users, about 10 MB of note text. A single user is capped at 1,000 chunks, but there is no check on the total, so seven users at their cap would fill the index.
 - **A failed upload is rolled back by the browser.** If a large upload fails partway and the clean-up request fails too, a partial note remains and has to be deleted by hand.

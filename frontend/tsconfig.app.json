@@ -7,7 +7,7 @@
     "types": ["vite/client"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
-    "paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] },
+    "paths": { "@/*": ["./src/*"], "@shared/*": ["../backend/src/shared/*"] },
 
     /* Bundler mode */
     "moduleResolution": "bundler",

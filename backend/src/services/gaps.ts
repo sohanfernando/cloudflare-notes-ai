@@ -1,4 +1,4 @@
-import type { Gap } from "../../../shared/types";
+import type { Gap } from "../shared/types";
 import type { Env } from "../types";
 
 /** Shorter messages are greetings or fragments, not questions worth tracking. */

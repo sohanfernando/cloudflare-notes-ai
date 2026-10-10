@@ -1,9 +1,17 @@
 import type { CurrentUser } from '@shared/types'
-import { LogOutIcon, MoonIcon, NotebookTextIcon, SunIcon } from 'lucide-react'
+import { LogOutIcon, MenuIcon, MoonIcon, NotebookTextIcon, SunIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ChatPanel, type ChatHandle } from '@/components/chat-panel'
 import { NotesPanel } from '@/components/notes-panel'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useGaps } from '@/hooks/use-gaps'
 import { useNotes, type UploadProgress } from '@/hooks/use-notes'
 import { useTheme } from '@/hooks/use-theme'
@@ -27,6 +35,7 @@ export default function App() {
   const notes = useNotes()
   const gaps = useGaps()
   const chat = useRef<ChatHandle>(null)
+  const themeLabel = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`
 
   const addNote = async (input: { title: string; content: string }, onProgress?: UploadProgress) => {
     await notes.add(input, onProgress)
@@ -47,28 +56,50 @@ export default function App() {
   return (
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between gap-3 border-b px-4 py-2">
-        <div className="flex items-center gap-2 font-semibold">
+        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold">
           <NotebookTextIcon className="size-5" /> Notes AI
         </div>
-        <div className="flex min-w-0 items-center gap-2">
+        {/* From the sm breakpoint the account controls sit in the header; on phones they are in a menu. */}
+        <div className="hidden min-w-0 items-center gap-2 sm:flex">
           {user && <span className="truncate text-muted-foreground text-sm">{user.userId}</span>}
-          <Button
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            onClick={toggle}
-            size="icon-sm"
-            variant="ghost"
-          >
+          <Button aria-label={themeLabel} onClick={toggle} size="icon-sm" variant="ghost">
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </Button>
           {user?.canSignOut && (
             <Button asChild size="sm" variant="outline">
               <a href={SIGN_OUT_URL}>
-                <LogOutIcon /> <span className="hidden sm:inline">Sign out</span>
-                <span className="sr-only sm:hidden">Sign out</span>
+                <LogOutIcon /> Sign out
               </a>
             </Button>
           )}
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button aria-label="Menu" className="sm:hidden" size="icon-sm" variant="ghost">
+              <MenuIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-auto min-w-48 max-w-[calc(100vw-2rem)]">
+            {user && (
+              <>
+                <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+                  {user.userId}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem onSelect={toggle}>
+              {theme === 'dark' ? <SunIcon /> : <MoonIcon />} {themeLabel}
+            </DropdownMenuItem>
+            {user?.canSignOut && (
+              <DropdownMenuItem asChild>
+                <a href={SIGN_OUT_URL}>
+                  <LogOutIcon /> Sign out
+                </a>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
 
       {/* On phones the two panels are tabs; from the md breakpoint they sit side by side. */}

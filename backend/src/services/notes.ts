@@ -1,4 +1,4 @@
-import { MAX_NOTE_BYTES, type NoteSummary } from "../../../shared/types";
+import { MAX_NOTE_BYTES, type NoteSummary } from "../shared/types";
 import { embedTexts } from "../lib/ai";
 import { chunkText } from "../lib/text";
 import { createVectorStore } from "../lib/vector-store";

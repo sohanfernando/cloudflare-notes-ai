@@ -5,6 +5,6 @@
     { "path": "./tsconfig.node.json" }
   ],
   "compilerOptions": {
-    "paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] }
+    "paths": { "@/*": ["./src/*"], "@shared/*": ["../backend/src/shared/*"] }
   }
 }

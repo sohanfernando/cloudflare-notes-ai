@@ -12,11 +12,13 @@
   "dependencies": {
     "@ai-sdk/react": "^4.0.130",
     "@fontsource-variable/geist": "^5.3.0",
+    "@gsap/react": "^2.1.2",
     "@tailwindcss/vite": "^4.3.3",
     "ai": "^7.0.127",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.4.0",
+    "gsap": "^3.15.0",
     "lucide-react": "^1.52.0",
     "mammoth": "^1.13.0",
     "nanoid": "^6.0.1",

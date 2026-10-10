@@ -6,7 +6,7 @@ import { handleError, handleNotFound } from "./middleware/error";
 import { chatRoutes } from "./routes/chat";
 import { gapsRoutes } from "./routes/gaps";
 import { notesRoutes } from "./routes/notes";
-import type { CurrentUser } from "../../shared/types";
+import type { CurrentUser } from "./shared/types";
 import type { AppEnv } from "./types";
 
 /** Cap on any request body; leaves room for JSON escaping around a 100 KB note. */

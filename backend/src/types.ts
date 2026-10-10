@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { ChatDataParts } from "../../shared/types";
+import type { ChatDataParts } from "./shared/types";
 
 /** Bindings and variables available to the Worker (see wrangler.toml and .dev.vars). */
 export interface Env {
@@ -15,6 +15,11 @@ export interface Env {
   LLM_API_KEY: string;
   LLM_MODEL: string;
   EMBEDDING_MODEL: string;
+  /**
+   * Vector size the embedding model produces; 768 when unset. In production it
+   * must match the Vectorize index. Stored vectors of another size are unusable.
+   */
+  EMBEDDING_DIMENSIONS?: string;
   /**
    * Lowest similarity score (0 to 1) a chunk needs to be shown as a source.
    * Set per environment because each embedding model scores on its own scale.
@@ -34,7 +39,7 @@ export interface Env {
   // Per-user limits; each falls back to a default in services/quota.ts when unset.
   /** Most notes one user can have. */
   MAX_NOTES_PER_USER?: string;
-  /** Most chunks one user's notes can hold in total; about 1.5 KB of text each. */
+  /** Most chunks one user's notes can hold in total; about 0.9 KB of text each. */
   MAX_CHUNKS_PER_USER?: string;
   /** Most questions one user can ask per UTC day. */
   MAX_QUESTIONS_PER_DAY?: string;

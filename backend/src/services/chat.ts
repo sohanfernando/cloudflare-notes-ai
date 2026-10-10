@@ -6,7 +6,7 @@ import {
   type ToolSet,
   type UIMessageStreamWriter,
 } from "ai";
-import type { Citation } from "../../../shared/types";
+import type { Citation } from "../shared/types";
 import { chatModel, embedTexts } from "../lib/ai";
 import { buildInstructions } from "../lib/prompt";
 import { AnswerStreamFilter, checkQuotes, resolveReply } from "../lib/quotes";
@@ -217,6 +217,8 @@ export async function answerQuestion(
         instructions: buildInstructions(chunks),
         messages: [...request.history, { role: "user", content: request.question }],
         maxOutputTokens: MAX_REPLY_TOKENS,
+        // The answer should follow the notes, not vary from one asking to the next.
+        temperature: 0,
       });
       const modelOutput = toUIMessageStream<ToolSet, ChatMessage>({
         stream: result.stream,

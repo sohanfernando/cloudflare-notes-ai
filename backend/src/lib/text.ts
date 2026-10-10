@@ -1,5 +1,5 @@
-export const CHUNK_TOKENS = 500;
-export const CHUNK_OVERLAP_TOKENS = 50;
+export const CHUNK_TOKENS = 250;
+export const CHUNK_OVERLAP_TOKENS = 40;
 
 /** Longest run of non-space characters kept as one word; longer runs are split. */
 const MAX_WORD_CHARS = 100;

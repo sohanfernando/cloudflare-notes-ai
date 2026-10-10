@@ -1,4 +1,4 @@
-# Local development settings. Copy to worker/.dev.vars (which is gitignored).
+# Local development settings. Copy to backend/.dev.vars (which is gitignored).
 # `wrangler dev` loads .dev.vars and it overrides [vars] in wrangler.toml.
 
 # Ollama's OpenAI-compatible API

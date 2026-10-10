@@ -2,8 +2,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { embedMany } from "ai";
 import type { Env } from "../types";
 
-/** Must match the Vectorize index; both configured embedding models produce this. */
-export const EMBEDDING_DIMENSIONS = 768;
+/** Size of the production Vectorize index, and of the default embedding models' vectors. */
+const DEFAULT_EMBEDDING_DIMENSIONS = 768;
 
 /** The LLM or embedding endpoint failed or was rate limited. */
 export class AiServiceError extends Error {
@@ -41,10 +41,11 @@ export async function embedTexts(env: Env, texts: string[]): Promise<number[][]>
     throw new AiServiceError(error);
   }
 
+  const dimensions = Number(env.EMBEDDING_DIMENSIONS) || DEFAULT_EMBEDDING_DIMENSIONS;
   for (const embedding of embeddings) {
-    if (embedding.length !== EMBEDDING_DIMENSIONS) {
+    if (embedding.length !== dimensions) {
       throw new Error(
-        `${env.EMBEDDING_MODEL} returned ${embedding.length} dimensions, expected ${EMBEDDING_DIMENSIONS}`,
+        `${env.EMBEDDING_MODEL} returned ${embedding.length} dimensions, expected ${dimensions}`,
       );
     }
   }
